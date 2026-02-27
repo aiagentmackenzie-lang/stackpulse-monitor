@@ -4,7 +4,7 @@ import Security
 
 /// Service for GitHub OAuth authentication and repository operations
 @MainActor
-class GitHubAuthService: NSObject, ObservableObject {
+final class GitHubAuthService: NSObject, ObservableObject {
     static let shared = GitHubAuthService()
     
     // GitHub OAuth Configuration
@@ -27,7 +27,7 @@ class GitHubAuthService: NSObject, ObservableObject {
     
     private var continuation: CheckedContinuation<String, Error>?
     
-    override init() {
+    init() {
         super.init()
         checkExistingToken()
     }
