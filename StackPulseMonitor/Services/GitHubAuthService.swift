@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import AuthenticationServices
 import Security
 
@@ -27,7 +28,7 @@ final class GitHubAuthService: NSObject, ObservableObject {
     
     private var continuation: CheckedContinuation<String, Error>?
 
-    init() {
+    override init() {
         super.init()
         checkExistingToken()
     }
