@@ -26,7 +26,7 @@ final class GitHubAuthService: NSObject, ObservableObject {
     @Published var errorMessage: String?
     
     private var continuation: CheckedContinuation<String, Error>?
-    
+
     init() {
         super.init()
         checkExistingToken()
