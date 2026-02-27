@@ -3,6 +3,11 @@ import SwiftUI
 struct StackSetupView: View {
     let viewModel: AppViewModel
     let onComplete: () -> Void
+    
+    // GitHub OAuth
+    @StateObject private var authService = GitHubAuthService.shared
+    @State private var showRepoList = false
+    @State private var selectedRepo: GitHubRepository?
 
     @State private var selectedPresets: Set<String> = []
     @State private var customName = ""
@@ -30,6 +35,36 @@ struct StackSetupView: View {
 
                 ScrollView {
                     VStack(spacing: 20) {
+                        // GitHub Import Section
+                        VStack(spacing: 16) {
+                            if authService.isAuthenticated {
+                                HStack {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(.green)
+                                    Text("Connected to GitHub as \(authService.username ?? "")")
+                                        .foregroundStyle(Theme.textPrimary)
+                                    Spacer()
+                                    Button {
+                                        showRepoList = true
+                                    } label: {
+                                        Text("Import from Repos")
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(.white)
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 10)
+                                            .background(Theme.accent)
+                                            .clipShape(.rect(cornerRadius: 8))
+                                    }
+                                }
+                            } else {
+                                GitHubAuthButton {
+                                    showRepoList = true
+                                }
+                            }
+                        }
+                        .padding(16)
+                        .cardStyle()
+
                         ForEach(categories, id: \.self) { category in
                             categorySection(category)
                         }
@@ -137,6 +172,15 @@ struct StackSetupView: View {
                     )
                 )
             }
+        }
+        .sheet(isPresented: $showRepoList) {
+            GitHubRepoListView { repo in
+                selectedRepo = repo
+                showRepoList = false
+            }
+        }
+        .sheet(item: $selectedRepo) { repo in
+            GitHubRepoBrowserView(repository: repo)
         }
     }
 
