@@ -523,7 +523,7 @@ final class GitHubAuthService: NSObject, ObservableObject {
         }
     }
     
-    private func getAccessTokenFromKeychain() -> String? {
+    func getAccessTokenFromKeychain() -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: tokenKey,
