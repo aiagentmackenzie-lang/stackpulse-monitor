@@ -81,8 +81,10 @@ struct GitHubRepoListView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var searchText = ""
+    @State private var selectedRepos: Set<Int> = []
     
     var onRepoSelected: ((GitHubRepository) -> Void)?
+    var onReposSelected: (([GitHubRepository]) -> Void)?
     
     var filteredRepos: [GitHubRepository] {
         if searchText.isEmpty {
@@ -160,12 +162,15 @@ struct GitHubRepoListView: View {
                         List {
                             Section {
                                 ForEach(filteredRepos) { repo in
-                                    RepoRow(repo: repo)
+                                    MultiSelectRepoRow(
+                                        repo: repo,
+                                        isSelected: selectedRepos.contains(repo.id)
+                                    )
                                         .listRowBackground(Color.clear)
                                         .listRowSeparator(.hidden)
                                         .contentShape(Rectangle())
                                         .onTapGesture {
-                                            onRepoSelected?(repo)
+                                            toggleSelection(repo)
                                         }
                                 }
                             } header: {
@@ -174,11 +179,40 @@ struct GitHubRepoListView: View {
                                         .font(.caption)
                                         .foregroundStyle(.white.opacity(0.5))
                                     Spacer()
+                                    if !selectedRepos.isEmpty {
+                                        Button("Clear (\(selectedRepos.count))") {
+                                            selectedRepos.removeAll()
+                                        }
+                                        .font(.caption)
+                                        .foregroundStyle(.blue)
+                                    }
                                 }
                             }
                         }
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
+                        .frame(maxHeight: .infinity)
+                        
+                        // Import button
+                        if !selectedRepos.isEmpty {
+                            Button {
+                                let selected = repositories.filter { selectedRepos.contains($0.id) }
+                                onReposSelected?(selected)
+                                dismiss()
+                            } label: {
+                                Text("Import \(selectedRepos.count) Repos")
+                                    .font(.headline)
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color.blue)
+                                    )
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 16)
+                        }
                     }
                 }
             }
@@ -228,6 +262,98 @@ struct GitHubRepoListView: View {
                 }
             }
         }
+    }
+    
+    private func toggleSelection(_ repo: GitHubRepository) {
+        if selectedRepos.contains(repo.id) {
+            selectedRepos.remove(repo.id)
+        } else {
+            selectedRepos.insert(repo.id)
+        }
+    }
+}
+
+/// Row with multi-select support
+struct MultiSelectRepoRow: View {
+    let repo: GitHubRepository
+    let isSelected: Bool
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Selection indicator
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 22))
+                .foregroundStyle(isSelected ? .blue : .white.opacity(0.3))
+            
+            // Icon
+            ZStack {
+                Circle()
+                    .fill(Color(hex: "1A1A1A"))
+                    .frame(width: 44, height: 44)
+                
+                Image(systemName: repo.isPrivate ? "lock.fill" : "folder")
+                    .font(.system(size: 18))
+                    .foregroundStyle(repo.isPrivate ? .orange : .blue)
+            }
+            
+            // Info
+            VStack(alignment: .leading, spacing: 4) {
+                Text(repo.name)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                
+                if let description = repo.description, !description.isEmpty {
+                    Text(description)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.6))
+                        .lineLimit(1)
+                }
+                
+                HStack(spacing: 12) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "star.fill")
+                            .font(.caption2)
+                        Text("\(repo.stargazersCount)")
+                            .font(.caption)
+                    }
+                    .foregroundStyle(.yellow)
+                    
+                    if let language = repo.language {
+                        Text(language)
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.6))
+                    }
+                    
+                    if let updatedAt = repo.updatedAt {
+                        let formatted = formatDate(updatedAt)
+                        Text(formatted)
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.4))
+                    }
+                }
+            }
+            
+            Spacer()
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(isSelected ? Color.blue.opacity(0.2) : Color(hex: "1A1A1A"))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isSelected ? Color.blue : Color.white.opacity(0.05), lineWidth: isSelected ? 2 : 1)
+        )
+    }
+    
+    private func formatDate(_ dateString: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        if let date = formatter.date(from: dateString) {
+            let displayFormatter = RelativeDateTimeFormatter()
+            displayFormatter.unitsStyle = .short
+            return displayFormatter.localizedString(for: date, relativeTo: Date())
+        }
+        return dateString
     }
 }
 

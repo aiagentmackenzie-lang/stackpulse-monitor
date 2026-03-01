@@ -108,11 +108,16 @@ final class GitHubAuthService: NSObject, ObservableObject {
                 
                 Task {
                     do {
+                        print("🔍 OAuth Step 1: Extracting code from callback...")
                         let code = try self.extractCode(from: callbackURL)
+                        print("🔍 OAuth Step 2: Got code, exchanging for token...")
+                        
                         let token = try await self.exchangeCodeForToken(code: code)
+                        print("🔍 OAuth Step 3: Got token, fetching user...")
                         
                         // Fetch user info
                         let user = try await self.fetchAuthenticatedUser(token: token)
+                        print("🔍 OAuth Step 4: Got user: \(user.login)")
                         
                         await MainActor.run {
                             self.isAuthenticated = true
@@ -123,6 +128,10 @@ final class GitHubAuthService: NSObject, ObservableObject {
                         
                         self.continuation?.resume(returning: token)
                     } catch {
+                        print("❌ OAuth failed: \(error)")
+                        if let authError = error as? GitHubAuthError {
+                            print("❌ Error type: \(authError.localizedDescription)")
+                        }
                         self.continuation?.resume(throwing: error)
                     }
                     self.continuation = nil
@@ -153,6 +162,13 @@ final class GitHubAuthService: NSObject, ObservableObject {
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
+        if let httpResponse = response as? HTTPURLResponse {
+            print("🔍 Token exchange HTTP status: \(httpResponse.statusCode)")
+            if httpResponse.statusCode != 200 {
+                print("❌ Token exchange failed with status: \(httpResponse.statusCode)")
+            }
+        }
+        
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
             throw GitHubAuthError.tokenExchangeFailed
@@ -163,8 +179,14 @@ final class GitHubAuthService: NSObject, ObservableObject {
             throw GitHubAuthError.tokenParseFailed
         }
         
+        // DEBUG: Write response to file for inspection
+        let debugPath = FileManager.default.temporaryDirectory.appendingPathComponent("github_oauth_response.txt")
+        try? responseString.write(to: debugPath, atomically: true, encoding: .utf8)
+        print("🔍 DEBUG: Response saved to: \(debugPath.path)")
+        
         // Debug: Print actual response
-        print("🔍 GitHub OAuth Response: \(responseString)")
+        print("🔍 GitHub OAuth Response (raw): \(responseString)")
+        print("🔍 Response length: \(responseString.count) chars")
         
         // Check for error response first
         if responseString.contains("error=") {
@@ -172,20 +194,34 @@ final class GitHubAuthService: NSObject, ObservableObject {
             throw GitHubAuthError.apiError("GitHub OAuth error: \(responseString)")
         }
         
-        // Extract access_token
-        let components = responseString.components(separatedBy: "&")
+        // Extract access_token - try multiple formats
         var token: String?
         
+        // Format 1: URL-encoded (access_token=xxx&scope=...)
+        let components = responseString.components(separatedBy: "&")
         for component in components {
             let parts = component.components(separatedBy: "=")
             if parts.count >= 2 && parts[0] == "access_token" {
                 token = parts[1]
+                print("🔍 Found token using URL-encoded format")
                 break
             }
         }
         
+        // Format 2: Check if it's JSON
+        if token == nil, let jsonData = responseString.data(using: .utf8) {
+            print("🔍 Trying JSON parsing...")
+            if let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+                print("🔍 Parsed JSON: \(json)")
+                if let accessToken = json["access_token"] as? String {
+                    token = accessToken
+                    print("🔍 Found token in JSON")
+                }
+            }
+        }
+        
         guard let accessToken = token else {
-            print("❌ No access_token found in response: \(responseString)")
+            print("❌ No access_token found in response. First 200 chars: \(String(responseString.prefix(200)))")
             throw GitHubAuthError.tokenParseFailed
         }
         
