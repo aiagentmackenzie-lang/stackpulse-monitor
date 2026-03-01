@@ -129,6 +129,10 @@ struct StackView: View {
 struct AddTechnologySheet: View {
     @Environment(\.dismiss) private var dismiss
     let viewModel: AppViewModel
+    
+    // GitHub OAuth
+    @StateObject private var authService = GitHubAuthService.shared
+    @State private var showRepoList = false
 
     @State private var searchText = ""
     @State private var searchResults: [NPMSearchPackage] = []
@@ -138,6 +142,7 @@ struct AddTechnologySheet: View {
     @State private var manualCategory: TechCategory = .other
     @State private var manualVersion = ""
     @State private var searchTask: Task<Void, Never>?
+    @State private var selectedRepos: [GitHubRepository] = []
 
     var body: some View {
         NavigationStack {
@@ -206,6 +211,60 @@ struct AddTechnologySheet: View {
                     }
                     .padding(16)
                     .cardStyle()
+                    
+                    // GitHub Import Section
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Import from GitHub")
+                            .font(.headline)
+                            .foregroundStyle(Theme.textPrimary)
+                        
+                        if authService.isAuthenticated {
+                            VStack(spacing: 12) {
+                                HStack {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.title3)
+                                        .foregroundStyle(.green)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Connected")
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(Theme.textPrimary)
+                                        Text(authService.username ?? "")
+                                            .font(.caption)
+                                            .foregroundStyle(Theme.textSecondary)
+                                    }
+                                    Spacer()
+                                }
+                                
+                                Button {
+                                    showRepoList = true
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "minus.circle")
+                                        Text("Add from GitHub")
+                                    }
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(Theme.accent)
+                                    .clipShape(.rect(cornerRadius: 8))
+                                }
+                            }
+                        } else {
+                            GitHubAuthButton {
+                                showRepoList = true
+                            }
+                        }
+                    }
+                    .padding(16)
+                    .cardStyle()
+                    .sheet(isPresented: $showRepoList) {
+                        GitHubRepoListView(onReposSelected: { repos in
+                            selectedRepos = repos
+                            showRepoList = false
+                            dismiss()
+                        })
+                    }
 
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Manual Entry")
