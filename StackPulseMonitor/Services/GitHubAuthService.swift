@@ -163,22 +163,33 @@ final class GitHubAuthService: NSObject, ObservableObject {
             throw GitHubAuthError.tokenParseFailed
         }
         
+        // Debug: Print actual response
+        print("🔍 GitHub OAuth Response: \(responseString)")
+        
+        // Check for error response first
+        if responseString.contains("error=") {
+            print("❌ GitHub returned error: \(responseString)")
+            throw GitHubAuthError.apiError("GitHub OAuth error: \(responseString)")
+        }
+        
         // Extract access_token
         let components = responseString.components(separatedBy: "&")
         var token: String?
         
         for component in components {
             let parts = component.components(separatedBy: "=")
-            if parts.count == 2 && parts[0] == "access_token" {
+            if parts.count >= 2 && parts[0] == "access_token" {
                 token = parts[1]
                 break
             }
         }
         
         guard let accessToken = token else {
+            print("❌ No access_token found in response: \(responseString)")
             throw GitHubAuthError.tokenParseFailed
         }
         
+        print("✅ Got access token (length: \(accessToken.count))")
         return accessToken
     }
     
