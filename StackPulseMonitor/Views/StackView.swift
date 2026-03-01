@@ -259,22 +259,7 @@ struct AddTechnologySheet: View {
                     .padding(16)
                     .cardStyle()
                     .sheet(isPresented: $showRepoList) {
-                        GitHubRepoListView(onReposSelected: { repos in
-                            // Convert GitHub repos to Technology and add to stack
-                            for repo in repos {
-                                let tech = Technology(
-                                    name: repo.name,
-                                    type: .github,
-                                    identifier: repo.fullName,
-                                    category: .devops,
-                                    currentVersion: "",
-                                    latestVersion: ""
-                                )
-                                viewModel.addTechnology(tech)
-                            }
-                            showRepoList = false
-                            dismiss()
-                        })
+                        GitHubRepoListView(onReposSelected: handleImportedRepos)
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
@@ -402,6 +387,61 @@ struct AddTechnologySheet: View {
             currentVersion: manualVersion
         )
         viewModel.addTechnology(tech)
+        dismiss()
+    }
+    
+    private func handleImportedRepos(_ repos: [GitHubRepository]) {
+        Task {
+            let token = GitHubAuthService.shared.getAccessTokenFromKeychain() ?? ""
+            
+            for repo in repos {
+                // Add repo itself
+                let repoTech = Technology(
+                    name: repo.name,
+                    type: .github,
+                    identifier: repo.fullName,
+                    category: .devops,
+                    currentVersion: "",
+                    latestVersion: ""
+                )
+                await MainActor.run {
+                    viewModel.addTechnology(repoTech)
+                }
+                
+                // Detect dependencies
+                do {
+                    let files = try await GitHubAuthService.shared.detectDependencyFiles(
+                        in: repo,
+                        token: token
+                    )
+                    
+                    for file in files {
+                        let deps = try await GitHubAuthService.shared.parseDependencies(
+                            from: file,
+                            token: token
+                        )
+                        
+                        for dep in deps {
+                            let depType: TechType = dep.ecosystem == .npm ? .npm : .language
+                            let depTech = Technology(
+                                name: dep.name,
+                                type: depType,
+                                identifier: "\(dep.ecosystem.rawValue):\(dep.name)",
+                                category: .backend,
+                                currentVersion: dep.version,
+                                latestVersion: dep.version
+                            )
+                            await MainActor.run {
+                                viewModel.addTechnology(depTech)
+                            }
+                        }
+                    }
+                } catch {
+                    print("⚠️ Failed to detect deps for \(repo.name): \(error)")
+                }
+            }
+        }
+        showRepoList = false
         dismiss()
     }
 }
