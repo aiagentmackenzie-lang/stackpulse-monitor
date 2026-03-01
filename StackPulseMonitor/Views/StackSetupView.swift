@@ -7,7 +7,7 @@ struct StackSetupView: View {
     // GitHub OAuth
     @StateObject private var authService = GitHubAuthService.shared
     @State private var showRepoList = false
-    @State private var selectedRepo: GitHubRepository?
+
 
     @State private var selectedPresets: Set<String> = []
     @State private var customName = ""
@@ -174,13 +174,9 @@ struct StackSetupView: View {
             }
         }
         .sheet(isPresented: $showRepoList) {
-            GitHubRepoListView { repo in
-                selectedRepo = repo
+            GitHubRepoListView(onReposSelected: { repos in
                 showRepoList = false
-            }
-        }
-        .sheet(item: $selectedRepo) { repo in
-            GitHubRepoBrowserView(repository: repo)
+            })
         }
     }
 
