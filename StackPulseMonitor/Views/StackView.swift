@@ -260,7 +260,18 @@ struct AddTechnologySheet: View {
                     .cardStyle()
                     .sheet(isPresented: $showRepoList) {
                         GitHubRepoListView(onReposSelected: { repos in
-                            selectedRepos = repos
+                            // Convert GitHub repos to Technology and add to stack
+                            for repo in repos {
+                                let tech = Technology(
+                                    name: repo.name,
+                                    type: .github,
+                                    identifier: repo.fullName,
+                                    category: .devops,
+                                    currentVersion: "",
+                                    latestVersion: ""
+                                )
+                                viewModel.addTechnology(tech)
+                            }
                             showRepoList = false
                             dismiss()
                         })

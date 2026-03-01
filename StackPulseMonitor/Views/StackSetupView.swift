@@ -188,6 +188,18 @@ struct StackSetupView: View {
         }
         .sheet(isPresented: $showRepoList) {
             GitHubRepoListView(onReposSelected: { repos in
+                // Convert GitHub repos to Technology and add to stack
+                for repo in repos {
+                    let tech = Technology(
+                        name: repo.name,
+                        type: .github,
+                        identifier: repo.fullName,
+                        category: .devops,
+                        currentVersion: "",
+                        latestVersion: ""
+                    )
+                    viewModel.addTechnology(tech)
+                }
                 showRepoList = false
             })
         }
