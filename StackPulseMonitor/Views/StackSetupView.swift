@@ -38,22 +38,35 @@ struct StackSetupView: View {
                         // GitHub Import Section
                         VStack(spacing: 16) {
                             if authService.isAuthenticated {
-                                HStack {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(.green)
-                                    Text("Connected to GitHub as \(authService.username ?? "")")
-                                        .foregroundStyle(Theme.textPrimary)
-                                    Spacer()
+                                VStack(spacing: 12) {
+                                    HStack {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.title3)
+                                            .foregroundStyle(.green)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Connected to GitHub")
+                                                .font(.headline)
+                                                .foregroundStyle(Theme.textPrimary)
+                                            Text(authService.username ?? "")
+                                                .font(.caption)
+                                                .foregroundStyle(Theme.textSecondary)
+                                        }
+                                        Spacer()
+                                    }
+                                    
                                     Button {
                                         showRepoList = true
                                     } label: {
-                                        Text("Import from Repos")
-                                            .font(.subheadline.weight(.semibold))
-                                            .foregroundStyle(.white)
-                                            .padding(.horizontal, 16)
-                                            .padding(.vertical, 10)
-                                            .background(Theme.accent)
-                                            .clipShape(.rect(cornerRadius: 8))
+                                        HStack {
+                                            Image(systemName: "minus.circle")
+                                            Text("Add from GitHub")
+                                        }
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 12)
+                                        .background(Theme.accent)
+                                        .clipShape(.rect(cornerRadius: 8))
                                     }
                                 }
                             } else {

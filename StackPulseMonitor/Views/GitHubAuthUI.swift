@@ -191,7 +191,6 @@ struct GitHubRepoListView: View {
                         }
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
-                        .frame(maxHeight: .infinity)
                         
                         // Import button
                         if !selectedRepos.isEmpty {
@@ -200,7 +199,7 @@ struct GitHubRepoListView: View {
                                 onReposSelected?(selected)
                                 dismiss()
                             } label: {
-                                Text("Import \(selectedRepos.count) Repos")
+                                Text("Import \(selectedRepos.count) Repo\(selectedRepos.count == 1 ? "" : "s")")
                                     .font(.headline)
                                     .foregroundStyle(.white)
                                     .frame(maxWidth: .infinity)
@@ -265,10 +264,12 @@ struct GitHubRepoListView: View {
     }
     
     private func toggleSelection(_ repo: GitHubRepository) {
-        if selectedRepos.contains(repo.id) {
-            selectedRepos.remove(repo.id)
-        } else {
-            selectedRepos.insert(repo.id)
+        withAnimation(.spring(duration: 0.3)) {
+            if selectedRepos.contains(repo.id) {
+                selectedRepos.remove(repo.id)
+            } else {
+                selectedRepos.insert(repo.id)
+            }
         }
     }
 }
