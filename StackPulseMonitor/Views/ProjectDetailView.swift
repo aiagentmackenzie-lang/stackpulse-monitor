@@ -156,7 +156,11 @@ struct ProjectDetailView: View {
             // Dependency rows
             VStack(spacing: 0) {
                 ForEach(dependencies) { dep in
-                    ProjectDetailDependencyRow(dependency: dep)
+                    ProjectDetailDependencyRow(
+                        projectId: projectId,
+                        dependencyId: dep.id,
+                        viewModel: viewModel
+                    )
                     
                     if dep.id != dependencies.last?.id {
                         Divider()
@@ -214,12 +218,29 @@ struct ProjectDetailView: View {
 // MARK: - Dependency Row
 
 struct ProjectDetailDependencyRow: View {
-    let dependency: Dependency
+    let projectId: UUID
+    let dependencyId: UUID
+    @Bindable var viewModel: AppViewModel
+    
+    // Look up live dependency from viewModel
+    private var dependency: Dependency? {
+        guard let project = viewModel.projects.first(where: { $0.id == projectId }),
+              let dep = project.dependencies.first(where: { $0.id == dependencyId }) else {
+            return nil
+        }
+        return dep
+    }
     
     var body: some View {
+        if let dep = dependency {
+            dependencyRowContent(dep)
+        }
+    }
+    
+    private func dependencyRowContent(_ dependency: Dependency) -> some View {
         HStack(spacing: 12) {
             // Status icon
-            statusIcon
+            statusIcon(for: dependency)
                 .frame(width: 24)
             
             // Name and version info
@@ -267,7 +288,7 @@ struct ProjectDetailDependencyRow: View {
     }
     
     @ViewBuilder
-    private var statusIcon: some View {
+    private func statusIcon(for dependency: Dependency) -> some View {
         if dependency.latestVersion == nil {
             Image(systemName: "questionmark.circle")
                 .foregroundStyle(.gray)
