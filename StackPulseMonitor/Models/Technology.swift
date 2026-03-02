@@ -11,7 +11,8 @@ struct Project: Identifiable, Codable, Equatable {
     var importedAt: Date
     var isExpanded: Bool = true
     var dependencies: [Dependency] = []
-    var aiReports: [ProjectAIReport] = []  // NEW: Persisted AI analyses
+    var aiReports: [ProjectAIReport] = []  // Persisted AI analyses
+    var aiThreads: [AIThread] = []         // NEW: Chat threads per project
     
     init(
         id: UUID = UUID(),
@@ -21,7 +22,8 @@ struct Project: Identifiable, Codable, Equatable {
         importedAt: Date = Date(),
         isExpanded: Bool = true,
         dependencies: [Dependency] = [],
-        aiReports: [ProjectAIReport] = []
+        aiReports: [ProjectAIReport] = [],
+        aiThreads: [AIThread] = []
     ) {
         self.id = id
         self.name = name
@@ -31,6 +33,7 @@ struct Project: Identifiable, Codable, Equatable {
         self.isExpanded = isExpanded
         self.dependencies = dependencies
         self.aiReports = aiReports
+        self.aiThreads = aiThreads
     }
     
     var dependencyCount: Int { dependencies.count }
@@ -203,4 +206,57 @@ nonisolated struct Vulnerability: Codable, Identifiable, Sendable, Hashable {
     var severity: String
     var publishedDate: String?
     var fixedVersion: String?
+}
+
+// MARK: - Project AI Thread Helpers
+
+extension Project {
+    /// Get or create the primary AI thread for this project
+    mutating func getOrCreateThread() -> AIThread {
+        if let existing = aiThreads.first(where: { !$0.isDeleted }) {
+            return existing
+        }
+        let newThread = AIThread(projectId: id)
+        aiThreads.append(newThread)
+        return newThread
+    }
+    
+    /// Add a message to the primary thread
+    mutating func addMessage(_ message: AIMessage) {
+        if let index = aiThreads.firstIndex(where: { !$0.isDeleted }) {
+            aiThreads[index].messages.append(message)
+            aiThreads[index].updatedAt = Date()
+        } else {
+            var thread = getOrCreateThread()
+            thread.messages.append(message)
+            thread.updatedAt = Date()
+            aiThreads.append(thread)
+        }
+    }
+    
+    /// Delete a specific thread
+    mutating func deleteThread(_ threadId: UUID) {
+        if let index = aiThreads.firstIndex(where: { $0.id == threadId }) {
+            aiThreads[index].isDeleted = true
+        }
+    }
+    
+    /// All active (non-deleted) threads
+    var activeThreads: [AIThread] {
+        aiThreads.filter { !$0.isDeleted }
+    }
+    
+    /// Primary thread summary for list view
+    var threadSummary: AIThreadSummary? {
+        guard let thread = activeThreads.first else { return nil }
+        return AIThreadSummary(
+            id: thread.id,
+            projectId: id,
+            projectName: name,
+            preview: thread.latestMessagePreview,
+            lastActivity: thread.lastActivityFormatted,
+            hasNewMessages: thread.hasNewMessages,
+            messageCount: thread.messages.count
+        )
+    }
 }
