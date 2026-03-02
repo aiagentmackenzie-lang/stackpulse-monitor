@@ -198,7 +198,11 @@ struct ProjectDetailView: View {
                 .background(Theme.border)
                 .padding(.vertical, 8)
             
-            if let report = aiReport {
+            // Check for persisted report first
+            if let persistedReport = project.aiReports.last {
+                // Show saved report
+                savedAIReportView(report: persistedReport)
+            } else if let report = aiReport {
                 // Show summary of AI report
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -315,6 +319,72 @@ struct ProjectDetailView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
+    }
+    
+    // MARK: - Saved AI Report View
+    
+    private func savedAIReportView(report: ProjectAIReport) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(.purple)
+                Text("AI Analysis")
+                    .font(.headline)
+                    .foregroundStyle(Theme.textPrimary)
+                Spacer()
+                Text("\(timeAgo(from: report.generatedAt))")
+                    .font(.caption)
+                    .foregroundStyle(Theme.muted)
+            }
+            
+            Text(report.summary)
+                .font(.subheadline)
+                .foregroundStyle(Theme.textSecondary)
+                .lineLimit(2)
+            
+            HStack(spacing: 12) {
+                if report.hasCritical {
+                    Label("\(report.criticalUpdates.count) Critical", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+                if report.hasSafe {
+                    Label("\(report.safeUpdates.count) Safe", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
+                if report.hasReview {
+                    Label("\(report.reviewRecommended.count) Review", systemImage: "eye.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+                Spacer()
+            }
+            
+            Button {
+                aiReport = report
+                showAIReport = true
+            } label: {
+                Label("View Full Report", systemImage: "doc.text")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.purple)
+            .padding(.top, 4)
+        }
+        .padding(16)
+        .background(Color(hex: 0x1A1A1A))
+        .clipShape(.rect(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Theme.border, lineWidth: 1)
+        )
+    }
+    
+    private func timeAgo(from date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
     
     private func generateAIReport() async {
