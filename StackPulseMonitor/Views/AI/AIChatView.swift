@@ -227,6 +227,7 @@ struct AIChatView: View {
             if isRecording {
                 // Stop recording and send transcribed text
                 let text = await speechRecognizer.stopRecording()
+                isRecording = false
                 if !text.isEmpty {
                     inputText = text
                     sendMessage()
@@ -240,10 +241,12 @@ struct AIChatView: View {
                         return
                     }
                     try await speechRecognizer.startRecording()
+                    isRecording = true
                 } catch {
                     await MainActor.run {
                         speechRecognizer.errorMessage = error.localizedDescription
                     }
+                    isRecording = false
                 }
             }
         }
