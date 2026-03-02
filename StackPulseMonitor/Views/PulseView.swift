@@ -7,6 +7,7 @@ struct PulseView: View {
     @State private var isCheckingVersions = false
     @State private var checkProgress = ""
     @State private var showMultiProjectAnalysis = false
+    @State private var showProjectPicker = false
     
     var body: some View {
         NavigationStack {
@@ -18,7 +19,7 @@ struct PulseView: View {
                     // AI Banner (when outdated deps exist)
                     if hasOutdatedDependencies {
                         AIAnalysisBanner(onAnalyze: {
-                            showMultiProjectAnalysis = true
+                            showProjectPicker = true
                         })
                     }
                     
@@ -47,6 +48,13 @@ struct PulseView: View {
             }
             .sheet(isPresented: $showMultiProjectAnalysis) {
                 MultiProjectAIAnalysisView(viewModel: viewModel)
+            }
+            .sheet(isPresented: $showProjectPicker) {
+                AIProjectPickerSheet(viewModel: viewModel) { selectedProjects in
+                    // Store selection and trigger multi-project analysis
+                    // (Works for both single and multiple projects)
+                    showMultiProjectAnalysis = true
+                }
             }
         }
     }

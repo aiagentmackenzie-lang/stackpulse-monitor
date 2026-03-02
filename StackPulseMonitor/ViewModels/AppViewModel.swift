@@ -494,6 +494,13 @@ class AppViewModel {
         }
         
         let report = try await fetchAIProjectAnalysis(request: request, key: openAIKey)
+        
+        // Save report to project
+        if let index = projects.firstIndex(where: { $0.id == projectId }) {
+            projects[index].aiReports.append(report)
+            persistProjects()
+        }
+        
         return report
     }
     

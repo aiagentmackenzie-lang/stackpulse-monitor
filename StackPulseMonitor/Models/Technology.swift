@@ -11,6 +11,7 @@ struct Project: Identifiable, Codable, Equatable {
     var importedAt: Date
     var isExpanded: Bool = true
     var dependencies: [Dependency] = []
+    var aiReports: [ProjectAIReport] = []  // NEW: Persisted AI analyses
     
     init(
         id: UUID = UUID(),
@@ -19,7 +20,8 @@ struct Project: Identifiable, Codable, Equatable {
         githubFullName: String? = nil,
         importedAt: Date = Date(),
         isExpanded: Bool = true,
-        dependencies: [Dependency] = []
+        dependencies: [Dependency] = [],
+        aiReports: [ProjectAIReport] = []
     ) {
         self.id = id
         self.name = name
@@ -28,6 +30,7 @@ struct Project: Identifiable, Codable, Equatable {
         self.importedAt = importedAt
         self.isExpanded = isExpanded
         self.dependencies = dependencies
+        self.aiReports = aiReports
     }
     
     var dependencyCount: Int { dependencies.count }
