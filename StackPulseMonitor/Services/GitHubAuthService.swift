@@ -91,10 +91,10 @@ final class GitHubAuthService: NSObject, ObservableObject {
             let session = ASWebAuthenticationSession(
                 url: authURL,
                 callbackURLScheme: callbackScheme
-            ) { [weak self] callbackURL, error in
+            ) { [weak self] callbackURL, authError in
                 guard let self = self else { return }
                 
-                if let error = error {
+                if let authError = authError {
                     self.continuation?.resume(throwing: GitHubAuthError.userCancelled)
                     self.continuation = nil
                     return

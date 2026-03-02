@@ -6,9 +6,9 @@ import Combine
 actor SpeechRecognizer: ObservableObject {
     static let shared = SpeechRecognizer()
     
-    @Published var isRecording = false
-    @Published var transcribedText = ""
-    @Published var errorMessage: String?
+    @Published @MainActor var isRecording = false
+    @Published @MainActor var transcribedText = ""
+    @Published @MainActor var errorMessage: String?
     
     private var speechRecognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
@@ -47,7 +47,7 @@ actor SpeechRecognizer: ObservableObject {
             throw SpeechError.notAuthorized
         }
         
-        // Reset state
+        // Reset state on main actor
         await MainActor.run {
             transcribedText = ""
             errorMessage = nil
@@ -118,14 +118,12 @@ actor SpeechRecognizer: ObservableObject {
         recognitionRequest = nil
         recognitionTask = nil
         
-        await MainActor.run {
-            isRecording = false
-        }
+        await MainActor.run { isRecording = false }
         
-        return transcribedText
+        return await MainActor.run { transcribedText }
     }
     
-    func cancelRecording() {
+    func cancelRecording() async {
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         
@@ -135,7 +133,7 @@ actor SpeechRecognizer: ObservableObject {
         recognitionRequest = nil
         recognitionTask = nil
         
-        Task { @MainActor in
+        await MainActor.run {
             isRecording = false
             transcribedText = ""
         }

@@ -80,5 +80,11 @@ struct ChatInputBar: View {
 
 #Preview("Input Bar") {
     @Previewable @State var text = ""
-    ChatInputBar(text: $text, onSend: {}, isStreaming: false)
+    ChatInputBar(
+        text: $text,
+        onSend: {},
+        isStreaming: false,
+        onMicTap: {},
+        isRecording: false
+    )
 }

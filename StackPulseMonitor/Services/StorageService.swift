@@ -1,6 +1,6 @@
 import Foundation
 
-nonisolated final class StorageService: Sendable {
+@preconcurrency final class StorageService: @unchecked Sendable {
     static let shared = StorageService()
 
     private let defaults = UserDefaults.standard

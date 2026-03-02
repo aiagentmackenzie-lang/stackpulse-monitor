@@ -42,5 +42,9 @@
     <true/>
     <key>UILaunchScreen</key>
     <dict/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>StackPulse needs microphone access to enable voice-to-text for AI chat.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>StackPulse needs speech recognition to transcribe your voice messages.</string>
 </dict>
 </plist>

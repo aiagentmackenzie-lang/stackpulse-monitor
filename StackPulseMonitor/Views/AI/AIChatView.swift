@@ -221,6 +221,33 @@ struct AIChatView: View {
             viewModel.persistProjects()
         }
     }
+    
+    private func toggleVoiceRecording() {
+        Task {
+            if isRecording {
+                // Stop recording and send transcribed text
+                let text = await speechRecognizer.stopRecording()
+                if !text.isEmpty {
+                    inputText = text
+                    sendMessage()
+                }
+            } else {
+                // Start recording
+                do {
+                    let authorized = await speechRecognizer.requestAuthorization()
+                    guard authorized else {
+                        // Show permission error
+                        return
+                    }
+                    try await speechRecognizer.startRecording()
+                } catch {
+                    await MainActor.run {
+                        speechRecognizer.errorMessage = error.localizedDescription
+                    }
+                }
+            }
+        }
+    }
 }
 
 // MARK: - Welcome Section
