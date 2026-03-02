@@ -433,4 +433,182 @@ class AppViewModel {
             }
         }
     }
+    
+    // MARK: - AI Analysis
+    
+    /// Generate AI-powered analysis report for a project
+    func generateAIReport(for projectId: UUID) async throws -> ProjectAIReport? {
+        let network = NetworkService.shared
+        
+        guard let project = projects.first(where: { $0.id == projectId }) else {
+            return nil
+        }
+        
+        // Get outdated dependencies with known latest versions
+        let outdatedDeps = project.dependencies.filter { dep in
+            dep.isOutdated && dep.latestVersion != nil
+        }
+        
+        guard !outdatedDeps.isEmpty else {
+            return nil // No outdated deps to analyze
+        }
+        
+        // Get CVE data for each dependency
+        var cveData: [String: [String]] = [:]
+        for dep in outdatedDeps {
+            do {
+                let vulns = try await network.fetchOSVVulnerabilities(
+                    packageName: dep.name,
+                    ecosystem: dep.type.rawValue
+                )
+                cveData[dep.name] = vulns.map { $0.id }
+            } catch {
+                cveData[dep.name] = []
+            }
+        }
+        
+        // Build dependency context
+        let depContexts: [AIDependencyContext] = outdatedDeps.map { dep in
+            AIDependencyContext(
+                name: dep.name,
+                currentVersion: dep.currentVersion,
+                latestVersion: dep.latestVersion ?? dep.currentVersion,
+                type: dep.type.rawValue,
+                category: dep.category.rawValue,
+                changelogSnippet: nil, // Could fetch from GitHub releases
+                cveCount: cveData[dep.name]?.count ?? 0
+            )
+        }
+        
+        // Build request
+        let request = AIProjectAnalysisRequest(
+            projectName: project.name,
+            dependencies: depContexts,
+            cveData: cveData,
+            currentStack: depContexts.map { "\($0.name)@\($0.currentVersion)" }.joined(separator: ", ")
+        )
+        
+        // Call OpenAI
+        guard !openAIKey.isEmpty else {
+            throw AIError.noAPIKey
+        }
+        
+        let report = try await fetchAIProjectAnalysis(request: request, key: openAIKey)
+        return report
+    }
+    
+    private func fetchAIProjectAnalysis(request: AIProjectAnalysisRequest, key: String) async throws -> ProjectAIReport {
+        guard let url = URL(string: "https://api.openai.com/v1/chat/completions") else {
+            throw AIError.invalidURL
+        }
+        
+        let userPrompt = """
+        Analyze these outdated dependencies for project "\(request.projectName)":
+        
+        Stack: \(request.currentStack)
+        
+        Dependencies to analyze:
+        \(request.dependencies.map { dep in
+            "- \(dep.name): \(dep.currentVersion) → \(dep.latestVersion) (\(dep.category), \(dep.type), \(dep.cveCount) CVEs)"
+        }.joined(separator: "\n"))
+        
+        CVEs:
+        \(request.cveData.map { "\($0.key): \($0.value.joined(separator: ", "))" }.joined(separator: "\n"))
+        
+        Return a JSON analysis with:
+        {
+          "summary": "Brief summary of update status",
+          "critical": [array of critical updates with security issues],
+          "safe": [array of safe, low-risk updates],
+          "review": [array of updates needing review],
+          "actionPlan": [prioritized list of steps],
+          "estimatedTime": "estimated time to complete",
+          "overallRiskScore": 0-100 (higher = more risky)
+        }
+        
+        For each dependency in critical/safe/review arrays, include:
+        {
+          "dependencyName": "name",
+          "riskLevel": "Critical|Important|Recommended|Optional",
+          "reason": "Why this classification",
+          "breakingChanges": true/false,
+          "securityImpact": "CVE details or null",
+          "migrationComplexity": "Simple|Moderate|Complex",
+          "recommendedAction": "Specific action to take"
+        }
+        """
+        
+        let body = OpenAIChatRequest(
+            model: "gpt-4o-mini",
+            messages: [
+                OpenAIMessage(role: "system", content: "You are a senior software architect. Analyze dependency updates and return valid JSON only. Be concise and actionable."),
+                OpenAIMessage(role: "user", content: userPrompt)
+            ],
+            temperature: 0.3
+        )
+        
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.httpBody = try JSONEncoder().encode(body)
+        
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw AIError.apiError("HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+        }
+        
+        let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
+        guard let content = chatResponse.choices?.first?.message?.content else {
+            throw AIError.noContent
+        }
+        
+        // Parse the JSON from content
+        let cleanContent = content
+            .replacingOccurrences(of: "```json", with: "")
+            .replacingOccurrences(of: "```", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        guard let jsonData = cleanContent.data(using: .utf8),
+              let aiResponse = try? JSONDecoder().decode(AIProjectAnalysisResponse.self, from: jsonData) else {
+            throw AIError.decodingFailed
+        }
+        
+        // Convert to ProjectAIReport
+        return ProjectAIReport(
+            projectId: request.dependencies.first.flatMap { _ in UUID() } ?? UUID(),
+            summary: aiResponse.summary,
+            criticalUpdates: aiResponse.critical.map { mapAIInsight($0) },
+            safeUpdates: aiResponse.safe.map { mapAIInsight($0) },
+            reviewRecommended: aiResponse.review.map { mapAIInsight($0) },
+            actionPlan: aiResponse.actionPlan,
+            estimatedTime: aiResponse.estimatedTime,
+            overallRiskScore: aiResponse.overallRiskScore
+        )
+    }
+    
+    private func mapAIInsight(_ raw: AIInsightRaw) -> AIDependencyInsight {
+        AIDependencyInsight(
+            dependencyName: raw.dependencyName,
+            currentVersion: "", // Will be looked up from project
+            latestVersion: "",
+            riskLevel: UpdateRiskLevel(rawValue: raw.riskLevel) ?? .optional,
+            reason: raw.reason,
+            breakingChanges: raw.breakingChanges,
+            securityImpact: raw.securityImpact,
+            migrationComplexity: Complexity(rawValue: raw.migrationComplexity) ?? .simple,
+            recommendedAction: raw.recommendedAction
+        )
+    }
 }
+
+enum AIError: Error {
+    case noAPIKey
+    case invalidURL
+    case apiError(String)
+    case noContent
+    case decodingFailed
+}
+

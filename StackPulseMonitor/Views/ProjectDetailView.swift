@@ -7,6 +7,10 @@ struct ProjectDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var isChecking = false
     @State private var checkProgress: Double = 0
+    @State private var showAIReport = false
+    @State private var aiReport: ProjectAIReport?
+    @State private var isGeneratingAIReport = false
+    @State private var aiError: String?
     
     // Look up project from viewModel so updates are live
     private var project: Project {
@@ -30,11 +34,19 @@ struct ProjectDetailView: View {
                 
                 // Dependencies by category
                 dependenciesSection
+                
+                // AI Analysis Section
+                aiAnalysisSection
             }
         }
         .background(Theme.background)
         .navigationTitle(project.name)
         .navigationBarTitleDisplayMode(.large)
+        .sheet(isPresented: $showAIReport) {
+            if let report = aiReport {
+                AIReportSheet(report: report, onDismiss: { showAIReport = false })
+            }
+        }
     }
     
     // MARK: - Header Section
@@ -178,6 +190,147 @@ struct ProjectDetailView: View {
         }
     }
     
+    // MARK: - AI Analysis Section
+    
+    private var aiAnalysisSection: some View {
+        VStack(spacing: 16) {
+            Divider()
+                .background(Theme.border)
+                .padding(.vertical, 8)
+            
+            if let report = aiReport {
+                // Show summary of AI report
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(.purple)
+                        Text("AI Analysis Complete")
+                            .font(.headline)
+                            .foregroundStyle(Theme.textPrimary)
+                        Spacer()
+                    }
+                    
+                    Text(report.summary)
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(2)
+                    
+                    HStack(spacing: 12) {
+                        if report.hasCritical {
+                            Label("\(report.criticalUpdates.count) Critical", systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                        if report.hasSafe {
+                            Label("\(report.safeUpdates.count) Safe", systemImage: "checkmark.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                        }
+                        if report.hasReview {
+                            Label("\(report.reviewRecommended.count) Review", systemImage: "eye.fill")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                        Spacer()
+                    }
+                    
+                    Button {
+                        showAIReport = true
+                    } label: {
+                        Label("View Full Report", systemImage: "doc.text")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.purple)
+                    .padding(.top, 4)
+                }
+                .padding(16)
+                .background(Color(hex: 0x1A1A1A))
+                .clipShape(.rect(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Theme.border, lineWidth: 1)
+                )
+            } else {
+                // Generate AI Report button
+                VStack(spacing: 12) {
+                    HStack {
+                        Image(systemName: "sparkles")
+                            .font(.title2)
+                            .foregroundStyle(.purple)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("AI Insights")
+                                .font(.headline)
+                                .foregroundStyle(Theme.textPrimary)
+                            
+                            Text("Get personalized analysis on which updates are safe, risky, or critical")
+                                .font(.caption)
+                                .foregroundStyle(Theme.textSecondary)
+                                .lineLimit(2)
+                        }
+                        
+                        Spacer()
+                    }
+                    
+                    Button {
+                        Task {
+                            await generateAIReport()
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if isGeneratingAIReport {
+                                ProgressView()
+                                    .tint(.white)
+                                    .scaleEffect(0.8)
+                                Text("Analyzing...")
+                            } else {
+                                Image(systemName: "wand.and.stars")
+                                Text("Get AI Analysis")
+                            }
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.purple)
+                    .disabled(isGeneratingAIReport)
+                    
+                    if let error = aiError {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .padding(16)
+                .background(Color(hex: 0x1A1A1A))
+                .clipShape(.rect(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Theme.border, lineWidth: 1)
+                )
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+    
+    private func generateAIReport() async {
+        isGeneratingAIReport = true
+        aiError = nil
+        
+        do {
+            let report = try await viewModel.generateAIReport(for: projectId)
+            aiReport = report
+        } catch {
+            aiError = "Failed to generate report: \(error.localizedDescription)"
+        }
+        
+        isGeneratingAIReport = false
+    }
+    
     // MARK: - Helpers
     
     private func dependencies(in category: TechCategory) -> [Dependency] {
@@ -302,6 +455,246 @@ struct ProjectDetailDependencyRow: View {
                 .foregroundStyle(.green)
                 .font(.callout)
         }
+    }
+}
+
+// MARK: - AI Report Sheet
+
+struct AIReportSheet: View {
+    let report: ProjectAIReport
+    let onDismiss: () -> Void
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Overall Assessment
+                    assessmentSection
+                        .background(Color(hex: 0x1A1A1A))
+                        .clipShape(.rect(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Theme.border, lineWidth: 1)
+                        )
+                        .padding(.horizontal, 16)
+                    
+                    // Critical Updates
+                    if !report.criticalUpdates.isEmpty {
+                        Section {
+                            updateSection(
+                                title: "🚨 Critical Updates",
+                                description: "Security vulnerabilities requiring immediate attention",
+                                updates: report.criticalUpdates,
+                                color: .red
+                            )
+                        }
+                    }
+                    
+                    // Safe Updates
+                    if !report.safeUpdates.isEmpty {
+                        Section {
+                            updateSection(
+                                title: "✅ Safe Updates",
+                                description: "Low risk, recommended to update",
+                                updates: report.safeUpdates,
+                                color: .green
+                            )
+                        }
+                    }
+                    
+                    // Review Recommended
+                    if !report.reviewRecommended.isEmpty {
+                        Section {
+                            updateSection(
+                                title: "⚠️ Review Recommended",
+                                description: "Breaking changes may require code updates",
+                                updates: report.reviewRecommended,
+                                color: .orange
+                            )
+                        }
+                    }
+                    
+                    // Action Plan
+                    actionPlanSection
+                        .background(Color(hex: 0x1A1A1A))
+                        .clipShape(.rect(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Theme.border, lineWidth: 1)
+                        )
+                        .padding(.horizontal, 16)
+                }
+                .padding(.vertical, 20)
+            }
+            .background(Theme.background.ignoresSafeArea())
+            .navigationTitle("AI Analysis")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done", action: onDismiss)
+                }
+            }
+        }
+    }
+    
+    private var assessmentSection: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Image(systemName: "sparkles")
+                    .font(.title2)
+                    .foregroundStyle(.purple)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Update Assessment")
+                        .font(.headline)
+                        .foregroundStyle(Theme.textPrimary)
+                    
+                    if let time = report.estimatedTime {
+                        Label("Est. time: \(time)", systemImage: "clock")
+                            .font(.caption)
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
+                
+                Spacer()
+                
+                // Risk Score
+                VStack(spacing: 0) {
+                    Text("\(report.overallRiskScore)")
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .foregroundStyle(riskColor)
+                    Text("risk")
+                        .font(.caption2)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+            }
+            
+            Text(report.summary)
+                .font(.subheadline)
+                .foregroundStyle(Theme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(16)
+    }
+    
+    private var riskColor: Color {
+        switch report.overallRiskScore {
+        case 0..<30: return .green
+        case 30..<60: return .orange
+        default: return .red
+        }
+    }
+    
+    private func updateSection(
+        title: String,
+        description: String,
+        updates: [AIDependencyInsight],
+        color: Color
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(color)
+                
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            
+            VStack(spacing: 0) {
+                ForEach(updates) { insight in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(insight.dependencyName)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Theme.textPrimary)
+                            
+                            Spacer()
+                            
+                            // Complexity badge
+                            Label(insight.migrationComplexity.rawValue, systemImage: insight.migrationComplexity.icon)
+                                .font(.caption2)
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                        
+                        Text(insight.reason)
+                            .font(.caption)
+                            .foregroundStyle(Theme.textSecondary)
+                            .lineLimit(3)
+                        
+                        if let security = insight.securityImpact {
+                            HStack(spacing: 4) {
+                                Image(systemName: "exclamationmark.shield.fill")
+                                    .foregroundStyle(.red)
+                                    .font(.caption)
+                                Text(security)
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                            }
+                        }
+                        
+                        Label(insight.recommendedAction, systemImage: "arrow.right.circle")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(color)
+                            .padding(.top, 4)
+                    }
+                    .padding(12)
+                    .background(Color(hex: 0x252525))
+                    .clipShape(.rect(cornerRadius: 8))
+                    .padding(.horizontal, -12)
+                    .padding(.vertical, -6)
+                    
+                    if insight.id != updates.last?.id {
+                        Divider()
+                            .background(Theme.border)
+                            .padding(.vertical, 12)
+                    }
+                }
+            }
+            .padding(12)
+            .background(Color(hex: 0x1A1A1A))
+            .clipShape(.rect(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(color.opacity(0.3), lineWidth: 1)
+            )
+            .padding(.horizontal, 16)
+        }
+    }
+    
+    private var actionPlanSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "checklist")
+                    .foregroundStyle(.purple)
+                Text("Your Action Plan")
+                    .font(.headline)
+                    .foregroundStyle(Theme.textPrimary)
+                Spacer()
+            }
+            
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(report.actionPlan.enumerated()), id: \.offset) { index, action in
+                    HStack(alignment: .top, spacing: 12) {
+                        Text("\(index + 1)")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.purple)
+                            .frame(width: 24, height: 24)
+                            .background(Color.purple.opacity(0.2))
+                            .clipShape(Circle())
+                        
+                        Text(action)
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        
+                        Spacer()
+                    }
+                }
+            }
+        }
+        .padding(16)
     }
 }
 
