@@ -3,6 +3,7 @@ import SwiftUI
 struct MainTabView: View {
     let viewModel: AppViewModel
     @Environment(\.scenePhase) private var scenePhase
+    @State private var showAISheet = false
     
     var body: some View {
         TabView {
@@ -16,6 +17,22 @@ struct MainTabView: View {
                 }
             }
 
+            // AI Tab (center, prominent)
+            Tab { EmptyView() } label: {
+                Button {
+                    showAISheet = true
+                } label: {
+                    VStack {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 24, weight: .semibold))
+                            .foregroundStyle(.purple)
+                        Text("AI")
+                            .font(.caption2)
+                            .foregroundStyle(.purple)
+                    }
+                }
+            }
+
             Tab("Alerts", systemImage: "bell.badge.fill") {
                 AlertsView(viewModel: viewModel)
             }
@@ -26,17 +43,20 @@ struct MainTabView: View {
             }
         }
         .tint(Theme.accent)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                AIButton(viewModel: viewModel)
+        .onChange(of: showAISheet) { _, isShowing in
+            if isShowing {
+                // Handled by sheet below
             }
         }
-        .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active {
-                // Refresh when app comes to foreground
-                viewModel.refreshAlerts()
-            }
+        .sheet(isPresented: $showAISheet) {
+            AIActionMenuSheet(viewModel: viewModel)
         }
+        // FIXME: .onChange API needs iOS version fix
+        // .onChange(of: scenePhase) { newPhase in
+        //     if newPhase == .active {
+        //         viewModel.refreshAlerts()
+        //     }
+        // }
     }
 }
 

@@ -6,6 +6,7 @@ struct PulseView: View {
     @State private var selectedProject: Project?
     @State private var isCheckingVersions = false
     @State private var checkProgress = ""
+    @State private var showMultiProjectAnalysis = false
     
     var body: some View {
         NavigationStack {
@@ -13,6 +14,13 @@ struct PulseView: View {
                 VStack(spacing: 16) {
                     // Header with overall stats
                     headerSection
+                    
+                    // AI Banner (when outdated deps exist)
+                    if hasOutdatedDependencies {
+                        AIAnalysisBanner(onAnalyze: {
+                            showMultiProjectAnalysis = true
+                        })
+                    }
                     
                     // Projects list
                     if viewModel.projects.isEmpty {
@@ -36,6 +44,9 @@ struct PulseView: View {
                             }
                         }
                 }
+            }
+            .sheet(isPresented: $showMultiProjectAnalysis) {
+                MultiProjectAIAnalysisView(viewModel: viewModel)
             }
         }
     }
@@ -144,6 +155,10 @@ struct PulseView: View {
         viewModel.projects.reduce(0) { $0 + $1.outdatedCount }
     }
     
+    private var hasOutdatedDependencies: Bool {
+        totalOutdatedCount > 0
+    }
+    
     private var lastUpdateTime: Date? {
         // Get the most recent lastChecked from any dependency across all projects
         let allTimes = viewModel.projects.flatMap { project in
@@ -156,6 +171,52 @@ struct PulseView: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
         return formatter.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+// MARK: - AI Analysis Banner
+
+struct AIAnalysisBanner: View {
+    let onAnalyze: () -> Void
+    
+    var body: some View {
+        Button(action: onAnalyze) {
+            HStack(spacing: 12) {
+                Image(systemName: "sparkles")
+                    .font(.title3)
+                    .foregroundStyle(.purple)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Get AI Analysis")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    
+                    Text("See recommendations for outdated dependencies")
+                        .font(.caption)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(Theme.muted)
+            }
+            .padding(16)
+            .background(
+                LinearGradient(
+                    colors: [Color.purple.opacity(0.15), Color.blue.opacity(0.1)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .clipShape(.rect(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.purple.opacity(0.3), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
     }
 }
 
