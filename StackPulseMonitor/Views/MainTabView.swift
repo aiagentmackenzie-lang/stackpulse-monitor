@@ -3,7 +3,6 @@ import SwiftUI
 struct MainTabView: View {
     let viewModel: AppViewModel
     @Environment(\.scenePhase) private var scenePhase
-    @State private var showAISheet = false
     
     var body: some View {
         TabView {
@@ -18,7 +17,9 @@ struct MainTabView: View {
             }
 
             // AI Tab (center, prominent) - Purple icon + text
-            Tab { EmptyView() } label: {
+            Tab { 
+                AIThreadListView(viewModel: viewModel)
+            } label: {
                 VStack(spacing: 4) {
                     Image(uiImage: renderPurpleSparkles())
                         .aspectRatio(contentMode: .fit)
@@ -27,7 +28,6 @@ struct MainTabView: View {
                         .font(.caption2)
                         .foregroundColor(Color(red: 0.61, green: 0.35, blue: 1.0))
                 }
-                .onAppear { showAISheet = true }
             }
 
             Tab("Alerts", systemImage: "bell.badge.fill") {
@@ -40,14 +40,6 @@ struct MainTabView: View {
             }
         }
         .tint(Theme.accent)
-        .onChange(of: showAISheet) { _, isShowing in
-            if isShowing {
-                // Handled by sheet below
-            }
-        }
-        .sheet(isPresented: $showAISheet) {
-            AIActionMenuSheet(viewModel: viewModel)
-        }
         // FIXME: .onChange API needs iOS version fix
         // .onChange(of: scenePhase) { newPhase in
         //     if newPhase == .active {
