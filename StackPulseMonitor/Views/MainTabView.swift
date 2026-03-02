@@ -3,21 +3,22 @@ import SwiftUI
 struct MainTabView: View {
     let viewModel: AppViewModel
     @Environment(\.scenePhase) private var scenePhase
+    @State private var selectedTab = 0
     
     var body: some View {
-        TabView {
-            Tab("Pulse", systemImage: "waveform.path.ecg") {
+        TabView(selection: $selectedTab) {
+            Tab("Pulse", systemImage: "waveform.path.ecg", value: 0) {
                 PulseView(viewModel: viewModel)
             }
 
-            Tab("Projects", systemImage: "folder.fill") {
+            Tab("Projects", systemImage: "folder.fill", value: 1) {
                 NavigationStack {
                     ProjectListView(viewModel: viewModel)
                 }
             }
 
             // AI Tab (center, prominent) - Purple icon + text
-            Tab { 
+            Tab(value: 2) {
                 AIThreadListView(viewModel: viewModel)
             } label: {
                 VStack(spacing: 4) {
@@ -30,16 +31,19 @@ struct MainTabView: View {
                 }
             }
 
-            Tab("Alerts", systemImage: "bell.badge.fill") {
+            Tab("Alerts", systemImage: "bell.badge.fill", value: 3) {
                 AlertsView(viewModel: viewModel)
             }
             .badge(viewModel.activeAlerts.count)
 
-            Tab("Settings", systemImage: "gearshape.fill") {
+            Tab("Settings", systemImage: "gearshape.fill", value: 4) {
                 SettingsView(viewModel: viewModel)
             }
         }
         .tint(Theme.accent)
+        .onReceive(NotificationCenter.default.publisher(for: .switchToProjectsTab)) { _ in
+            selectedTab = 1  // Switch to Projects tab
+        }
         // FIXME: .onChange API needs iOS version fix
         // .onChange(of: scenePhase) { newPhase in
         //     if newPhase == .active {
@@ -233,4 +237,5 @@ struct AIActionCard: View {
 
 extension Notification.Name {
     static let switchToPulseTab = Notification.Name("switchToPulseTab")
+    static let switchToProjectsTab = Notification.Name("switchToProjectsTab")
 }

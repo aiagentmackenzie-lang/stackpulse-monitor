@@ -1,6 +1,7 @@
 import Foundation
 
-@preconcurrency final class StorageService: @unchecked Sendable {
+@MainActor
+final class StorageService {
     static let shared = StorageService()
 
     private let defaults = UserDefaults.standard
@@ -85,10 +86,11 @@ import Foundation
     }
 
     // MARK: - Project Storage
-
+    
     func saveProjects(_ projects: [Project]) {
         if let data = try? encoder.encode(projects) {
             defaults.set(data, forKey: projectsKey)
+            defaults.synchronize() // Force immediate write
         }
     }
 

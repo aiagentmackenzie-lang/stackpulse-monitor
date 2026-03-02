@@ -135,7 +135,7 @@ struct PulseView: View {
             }
             
             Button {
-                // Navigate to Projects tab
+                NotificationCenter.default.post(name: .switchToProjectsTab, object: nil)
             } label: {
                 Label("Add Project", systemImage: "plus")
                     .font(.headline)

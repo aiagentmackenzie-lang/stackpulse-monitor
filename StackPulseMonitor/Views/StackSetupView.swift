@@ -171,6 +171,23 @@ struct StackSetupView: View {
             VStack {
                 Spacer()
                 Button {
+                    // If no projects but has stack items, create a project from selections
+                    if viewModel.projects.isEmpty && !viewModel.stackItems.isEmpty {
+                        let stackProject = Project(
+                            name: "My Stack",
+                            source: .manual,
+                            dependencies: viewModel.stackItems.map { tech in
+                                Dependency(
+                                    name: tech.name,
+                                    type: tech.type,
+                                    category: tech.category,
+                                    currentVersion: "",
+                                    latestVersion: nil
+                                )
+                            }
+                        )
+                        viewModel.addProject(stackProject)
+                    }
                     viewModel.completeSetup()
                     onComplete()
                 } label: {
@@ -182,10 +199,10 @@ struct StackSetupView: View {
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
-                    .background(viewModel.projects.isEmpty ? Theme.muted : Theme.accent)
+                    .background(viewModel.projects.isEmpty && viewModel.stackItems.isEmpty ? Theme.muted : Theme.accent)
                     .clipShape(.rect(cornerRadius: 14))
                 }
-                .disabled(viewModel.projects.isEmpty)
+                .disabled(viewModel.projects.isEmpty && viewModel.stackItems.isEmpty)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 16)
                 .background(

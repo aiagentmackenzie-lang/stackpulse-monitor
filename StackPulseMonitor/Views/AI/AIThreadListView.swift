@@ -297,7 +297,7 @@ struct EmptyStateView: View {
                 .padding(.horizontal, 40)
             
             Button {
-                // Navigate to projects tab
+                NotificationCenter.default.post(name: .switchToProjectsTab, object: nil)
             } label: {
                 Label("Go to Projects", systemImage: "folder.fill")
                     .font(.headline)
