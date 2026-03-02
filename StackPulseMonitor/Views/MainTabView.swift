@@ -17,13 +17,15 @@ struct MainTabView: View {
                 }
             }
 
-            // AI Tab (center, prominent) - Always purple
+            // AI Tab (center, prominent) - Purple icon + text
             Tab { EmptyView() } label: {
                 VStack(spacing: 4) {
-                    Image(systemName: "sparkles")
-                        .foregroundStyle(.purple)
+                    Image(uiImage: renderPurpleSparkles())
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 22, height: 22)
                     Text("AI")
-                        .foregroundStyle(.purple)
+                        .font(.caption2)
+                        .foregroundColor(.purple)
                 }
                 .onAppear { showAISheet = true }
             }
@@ -53,6 +55,17 @@ struct MainTabView: View {
         //     }
         // }
     }
+}
+
+// MARK: - Helper Functions
+
+/// Create a pre-colored purple sparkles image
+private func renderPurpleSparkles() -> UIImage {
+    let config = UIImage.SymbolConfiguration(pointSize: 20, weight: .regular)
+    guard let image = UIImage(systemName: "sparkles", withConfiguration: config) else {
+        return UIImage()
+    }
+    return image.withTintColor(.purple, renderingMode: .alwaysOriginal)
 }
 
 // MARK: - AI Button
