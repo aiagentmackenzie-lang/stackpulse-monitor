@@ -4,48 +4,43 @@ struct MainTabView: View {
     let viewModel: AppViewModel
     @Environment(\.scenePhase) private var scenePhase
     @State private var showAISheet = false
+    @State private var selectedTab = 0  // Track active tab
     
     var body: some View {
-        TabView {
-            Tab("Pulse", systemImage: "waveform.path.ecg") {
+        TabView(selection: $selectedTab) {
+            Tab("Pulse", systemImage: "waveform.path.ecg", value: 0) {
                 PulseView(viewModel: viewModel)
             }
 
-            Tab("Projects", systemImage: "folder.fill") {
+            Tab("Projects", systemImage: "folder.fill", value: 1) {
                 NavigationStack {
                     ProjectListView(viewModel: viewModel)
                 }
             }
 
-            // AI Tab (center, prominent)
-            Tab { EmptyView() } label: {
-                Button {
-                    showAISheet = true
-                } label: {
-                    VStack {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 24, weight: .semibold))
-                            .foregroundStyle(.purple)
-                        Text("AI")
-                            .font(.caption2)
-                            .foregroundStyle(.purple)
-                    }
-                }
+            // AI Tab (center, prominent) - Purple icon
+            Tab(value: 2) {
+                EmptyView()
+            } label: {
+                Label("AI", systemImage: "sparkles")
+                    .foregroundStyle(.purple)
             }
 
-            Tab("Alerts", systemImage: "bell.badge.fill") {
+            Tab("Alerts", systemImage: "bell.badge.fill", value: 3) {
                 AlertsView(viewModel: viewModel)
             }
             .badge(viewModel.activeAlerts.count)
 
-            Tab("Settings", systemImage: "gearshape.fill") {
+            Tab("Settings", systemImage: "gearshape.fill", value: 4) {
                 SettingsView(viewModel: viewModel)
             }
         }
         .tint(Theme.accent)
-        .onChange(of: showAISheet) { _, isShowing in
-            if isShowing {
-                // Handled by sheet below
+        .onChange(of: selectedTab) { oldTab, newTab in
+            if newTab == 2 {
+                // AI tab tapped - show sheet and revert
+                showAISheet = true
+                selectedTab = oldTab  // Go back to previous tab
             }
         }
         .sheet(isPresented: $showAISheet) {
