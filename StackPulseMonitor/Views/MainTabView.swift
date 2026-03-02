@@ -25,7 +25,7 @@ struct MainTabView: View {
                         .frame(width: 22, height: 22)
                     Text("AI")
                         .font(.caption2)
-                        .foregroundColor(.purple)
+                        .foregroundColor(Color(red: 0.61, green: 0.35, blue: 1.0))
                 }
                 .onAppear { showAISheet = true }
             }
@@ -59,13 +59,15 @@ struct MainTabView: View {
 
 // MARK: - Helper Functions
 
-/// Create a pre-colored purple sparkles image
+/// Create a pre-colored bright purple sparkles image
 private func renderPurpleSparkles() -> UIImage {
     let config = UIImage.SymbolConfiguration(pointSize: 20, weight: .regular)
     guard let image = UIImage(systemName: "sparkles", withConfiguration: config) else {
         return UIImage()
     }
-    return image.withTintColor(.purple, renderingMode: .alwaysOriginal)
+    // Bright purple: RGB(155, 89, 255) - vibrant purple
+    let brightPurple = UIColor(red: 0.61, green: 0.35, blue: 1.0, alpha: 1.0)
+    return image.withTintColor(brightPurple, renderingMode: .alwaysOriginal)
 }
 
 // MARK: - AI Button
