@@ -8,6 +8,7 @@ nonisolated final class StorageService: Sendable {
     private let decoder = JSONDecoder()
 
     private let stackKey = "sp_stack"
+    private let projectsKey = "sp_projects"  // New: Project-centric storage
     private let alertsKey = "sp_alerts"
     private let openAIKeyKey = "sp_openai_key"
     private let settingsKey = "sp_settings"
@@ -71,7 +72,7 @@ nonisolated final class StorageService: Sendable {
     }
 
     func hasStack() -> Bool {
-        !loadStack().isEmpty
+        !loadStack().isEmpty || !loadProjects().isEmpty
     }
 
     func clearAll() {
@@ -81,5 +82,21 @@ nonisolated final class StorageService: Sendable {
         defaults.removeObject(forKey: settingsKey)
         defaults.removeObject(forKey: lastSyncKey)
         defaults.removeObject(forKey: hasOnboardedKey)
+    }
+
+    // MARK: - Project Storage
+
+    func saveProjects(_ projects: [Project]) {
+        if let data = try? encoder.encode(projects) {
+            defaults.set(data, forKey: projectsKey)
+        }
+    }
+
+    func loadProjects() -> [Project] {
+        guard let data = defaults.data(forKey: projectsKey),
+              let projects = try? decoder.decode([Project].self, from: data) else {
+            return []
+        }
+        return projects
     }
 }

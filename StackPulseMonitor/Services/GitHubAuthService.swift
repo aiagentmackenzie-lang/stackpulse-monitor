@@ -291,11 +291,35 @@ final class GitHubAuthService: NSObject, ObservableObject {
         return files
     }
     
-    /// Fetches file content
-    func fetchFileContent(
-        urlString: String,
-        token: String? = nil
-    ) async throws -> String {
+    /// Fetches raw file content from raw.githubusercontent.com
+    func fetchRawContent(urlString: String, token: String? = nil) async throws -> String {
+        let accessToken = token ?? getAccessTokenFromKeychain() ?? ""
+        
+        guard let url = URL(string: urlString) else {
+            throw GitHubAuthError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        if !accessToken.isEmpty {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw GitHubAuthError.apiError("Failed to fetch file content (status: \((response as? HTTPURLResponse)?.statusCode ?? 0))")
+        }
+        
+        guard let content = String(data: data, encoding: .utf8) else {
+            throw GitHubAuthError.parseError("Failed to decode content as UTF-8")
+        }
+        
+        return content
+    }
+    
+    /// Fetches file content via GitHub API (returns base64 encoded)
+    func fetchAPIContent(urlString: String, token: String? = nil) async throws -> String {
         let accessToken = token ?? getAccessTokenFromKeychain() ?? ""
         
         guard !accessToken.isEmpty else {
@@ -308,40 +332,61 @@ final class GitHubAuthService: NSObject, ObservableObject {
         
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw GitHubAuthError.apiError("Failed to fetch file content")
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GitHubAuthError.apiError("Invalid response from server")
         }
         
-        // Decode base64 content
+        guard httpResponse.statusCode == 200 else {
+            if httpResponse.statusCode == 404 {
+                throw GitHubAuthError.apiError("File not found")
+            }
+            throw GitHubAuthError.apiError("Failed to fetch file content (status: \(httpResponse.statusCode))")
+        }
+        
+        // Decode base64 content from API response
         struct FileContent: Codable {
             let content: String
-            let encoding: String
+            let encoding: String?
+            
+            enum CodingKeys: String, CodingKey {
+                case content
+                case encoding
+            }
         }
         
         let fileContent = try JSONDecoder().decode(FileContent.self, from: data)
         
-        guard fileContent.encoding == "base64" else {
-            throw GitHubAuthError.parseError("Unexpected encoding")
+        if fileContent.encoding == "base64" {
+            // Clean up base64 string (remove newlines that GitHub adds)
+            let cleanBase64 = fileContent.content.replacingOccurrences(of: "\n", with: "")
+            
+            guard let decodedData = Data(base64Encoded: cleanBase64),
+                  let decodedString = String(data: decodedData, encoding: .utf8) else {
+                throw GitHubAuthError.parseError("Failed to decode base64 content")
+            }
+            
+            return decodedString
+        } else {
+            // Sometimes content is returned directly
+            return fileContent.content
         }
-        
-        // Clean up base64 string (remove newlines)
-        let cleanBase64 = fileContent.content.replacingOccurrences(of: "\n", with: "")
-        
-        guard let data = Data(base64Encoded: cleanBase64),
-              let content = String(data: data, encoding: .utf8) else {
-            throw GitHubAuthError.parseError("Failed to decode content")
-        }
-        
-        return content
+    }
+    
+    /// Legacy method - kept for compatibility
+    @available(*, deprecated, renamed: "fetchAPIContent")
+    func fetchFileContent(urlString: String, token: String? = nil) async throws -> String {
+        return try await fetchAPIContent(urlString: urlString, token: token)
     }
     
     /// Detects dependency files in repository root
     func detectDependencyFiles(in repo: GitHubRepository, token: String? = nil) async throws -> [GitHubFile] {
         let files = try await fetchRepoFiles(repo: repo, path: "", token: token)
+        
+        print("🔍 Raw files from API: \(files.map { $0.name })")
         
         let dependencyFilenames = [
             "package.json",
@@ -354,20 +399,50 @@ final class GitHubAuthService: NSObject, ObservableObject {
             "build.gradle",
             "requirements.txt",
             "pyproject.toml",
+            "Pipfile",
+            "Pipfile.lock",
             "Gemfile",
             "Gemfile.lock",
             "composer.json",
             "composer.lock"
         ]
         
-        return files.filter { file in
-            dependencyFilenames.contains(file.name)
+        let filtered = files.filter { file in
+            let matches = dependencyFilenames.contains(file.name)
+            print("  - \(file.name): \(matches ? "✅ MATCH" : "❌ no match")")
+            return matches
         }
+        
+        print("🔍 Filtered files: \(filtered.map { $0.name })")
+        print("🔍 Total files: \(files.count), Filtered: \(filtered.count)")
+        
+        return filtered
     }
     
     /// Parses dependencies from a manifest file
     func parseDependencies(from file: GitHubFile, token: String? = nil) async throws -> [DetectedDependency] {
-        let content = try await fetchFileContent(urlString: file.downloadUrl, token: token)
+        guard let urlString = file.contentUrl else {
+            throw GitHubAuthError.parseError("No URL available for file: \(file.name)")
+        }
+        
+        let content: String
+        
+        // If it's a download URL (raw.githubusercontent.com), fetch directly
+        if urlString.contains("raw.githubusercontent.com") {
+            content = try await fetchRawContent(urlString: urlString, token: token)
+        } else if urlString.contains("api.github.com") {
+            // It's an API URL, fetch via API with base64 decoding
+            content = try await fetchAPIContent(urlString: urlString, token: token)
+        } else {
+            // Try as raw URL first, then API
+            do {
+                content = try await fetchRawContent(urlString: urlString, token: token)
+            } catch {
+                content = try await fetchAPIContent(urlString: urlString, token: token)
+            }
+        }
+        
+        print("📄 Parsing \(file.name) - \(content.count) characters")
         
         switch file.name {
         case "package.json":
@@ -376,8 +451,12 @@ final class GitHubAuthService: NSObject, ObservableObject {
             return try parseGoDependencies(content: content)
         case "Cargo.toml":
             return try parseCargoDependencies(content: content)
-        case "requirements.txt":
+        case "requirements.txt", "Pipfile":
             return try parsePythonDependencies(content: content)
+        case "Gemfile":
+            return try parseGemDependencies(content: content)
+        case "composer.json":
+            return try parseComposerDependencies(content: content)
         default:
             return []
         }
@@ -524,6 +603,95 @@ final class GitHubAuthService: NSObject, ObservableObject {
                 ecosystem: .pypi,
                 isDev: false
             ))
+        }
+        
+        return deps
+    }
+    
+    private func parseGemDependencies(content: String) throws -> [DetectedDependency] {
+        var deps: [DetectedDependency] = []
+        let lines = content.components(separatedBy: .newlines)
+        
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("gem ") else { continue }
+            
+            // Parse: gem "rails", "~> 7.0" or gem 'rails', '~> 7.0'
+            let withoutPrefix = trimmed.dropFirst(4).trimmingCharacters(in: .whitespaces)
+            
+            // Handle quoted string
+            let quoteChar = withoutPrefix.first
+            guard quoteChar == "\"" || quoteChar == "'" else { continue }
+            
+            let endQuote = withoutPrefix.dropFirst().firstIndex(where: { $0 == quoteChar })
+            guard let nameEnd = endQuote else { continue }
+            
+            let name = String(withoutPrefix[withoutPrefix.index(after: withoutPrefix.startIndex)..<nameEnd])
+            
+            // Check for version after comma
+            var version = "latest"
+            let remaining = String(withoutPrefix[nameEnd...]).trimmingCharacters(in: .whitespaces)
+            
+            if remaining.hasPrefix(","), let commaIndex = remaining.firstIndex(of: ",") {
+                let versionPart = String(remaining[remaining.index(after: commaIndex)...])
+                    .trimmingCharacters(in: .whitespaces)
+                    .replacingOccurrences(of: "\"", with: "")
+                    .replacingOccurrences(of: "'", with: "")
+                    .replacingOccurrences(of: ",", with: "")
+                if !versionPart.isEmpty {
+                    version = versionPart
+                }
+            }
+            
+            deps.append(DetectedDependency(
+                name: name,
+                version: version,
+                ecosystem: .gem,
+                isDev: false
+            ))
+        }
+        
+        return deps
+    }
+    
+    private func parseComposerDependencies(content: String) throws -> [DetectedDependency] {
+        struct ComposerJSON: Codable {
+            let require: [String: String]?
+            let requireDev: [String: String]?
+            
+            enum CodingKeys: String, CodingKey {
+                case require
+                case requireDev = "require-dev"
+            }
+        }
+        
+        let data = content.data(using: .utf8)!
+        let composer = try JSONDecoder().decode(ComposerJSON.self, from: data)
+        
+        var deps: [DetectedDependency] = []
+        
+        if let require = composer.require {
+            for (name, version) in require {
+                // Skip PHP version require
+                guard !name.hasPrefix("php") && !name.hasPrefix("ext-") else { continue }
+                deps.append(DetectedDependency(
+                    name: name,
+                    version: version,
+                    ecosystem: .composer,
+                    isDev: false
+                ))
+            }
+        }
+        
+        if let requireDev = composer.requireDev {
+            for (name, version) in requireDev {
+                deps.append(DetectedDependency(
+                    name: name,
+                    version: version,
+                    ecosystem: .composer,
+                    isDev: true
+                ))
+            }
         }
         
         return deps
@@ -693,13 +861,19 @@ struct GitHubFile: Codable, Identifiable {
     let sha: String
     let size: Int
     let type: String
-    let downloadUrl: String
+    let downloadUrl: String?
+    let url: String?  // The API URL for fetching content
     
     var id: String { sha }
     
     enum CodingKeys: String, CodingKey {
-        case name, path, sha, size, type
+        case name, path, sha, size, type, url
         case downloadUrl = "download_url"
+    }
+    
+    /// Gets the best URL to fetch content from
+    var contentUrl: String? {
+        downloadUrl ?? url
     }
 }
 
@@ -718,6 +892,8 @@ enum EcosystemType: String {
     case cargo = "Cargo"
     case maven = "Maven"
     case gradle = "Gradle"
+    case gem = "RubyGems"
+    case composer = "Composer"
     
     var osvEcosystem: String {
         switch self {
@@ -727,6 +903,8 @@ enum EcosystemType: String {
         case .cargo: return "crates.io"
         case .maven: return "Maven"
         case .gradle: return "Gradle"
+        case .gem: return "RubyGems"
+        case .composer: return "Packagist"
         }
     }
 }

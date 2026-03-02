@@ -1,10 +1,23 @@
 import SwiftUI
 
+enum ImportSheetType: Identifiable {
+    case repoList
+    case importPreview([GitHubRepository])
+    
+    var id: String {
+        switch self {
+        case .repoList: return "repoList"
+        case .importPreview: return "importPreview"
+        }
+    }
+}
+
 struct StackView: View {
     let viewModel: AppViewModel
     @State private var showAddSheet = false
     @State private var selectedTech: Technology?
     @State private var expandedCategories: Set<TechCategory> = Set(TechCategory.allCases)
+    @State private var activeSheet: ImportSheetType?
 
     private var groupedItems: [(TechCategory, [Technology])] {
         let grouped = Dictionary(grouping: viewModel.stackItems) { $0.category }
@@ -143,6 +156,7 @@ struct AddTechnologySheet: View {
     @State private var manualVersion = ""
     @State private var searchTask: Task<Void, Never>?
     @State private var selectedRepos: [GitHubRepository] = []
+    @State private var activeSheet: ImportSheetType?
 
     var body: some View {
         NavigationStack {
@@ -234,9 +248,9 @@ struct AddTechnologySheet: View {
                                     }
                                     Spacer()
                                 }
-                                
+
                                 Button {
-                                    showRepoList = true
+                                    activeSheet = .repoList
                                 } label: {
                                     HStack {
                                         Image(systemName: "minus.circle")
@@ -252,14 +266,32 @@ struct AddTechnologySheet: View {
                             }
                         } else {
                             GitHubAuthButton {
-                                showRepoList = true
+                                activeSheet = .repoList
                             }
                         }
                     }
                     .padding(16)
                     .cardStyle()
-                    .sheet(isPresented: $showRepoList) {
-                        GitHubRepoListView(onReposSelected: handleImportedRepos)
+                    .sheet(item: $activeSheet) { sheet in
+                        switch sheet {
+                        case .repoList:
+                            GitHubRepoListView(onReposSelected: { repos in
+                                activeSheet = .importPreview(repos)
+                            })
+                        case .importPreview(let repos):
+                            ImportPreviewView(
+                                repositories: repos,
+                                onConfirm: {
+                                    Task {
+                                        await performImport(repos: repos)
+                                        activeSheet = nil
+                                    }
+                                },
+                                onCancel: {
+                                    activeSheet = nil
+                                }
+                            )
+                        }
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
@@ -294,7 +326,7 @@ struct AddTechnologySheet: View {
                         HStack(spacing: 8) {
                             Picker("Type", selection: $manualType) {
                                 ForEach(TechType.allCases, id: \.self) { type in
-                                    Text(type.rawValue.uppercased()).tag(type)
+                                    Text(type.displayName).tag(type)
                                 }
                             }
                             .pickerStyle(.menu)
@@ -391,57 +423,408 @@ struct AddTechnologySheet: View {
     }
     
     private func handleImportedRepos(_ repos: [GitHubRepository]) {
-        Task {
-            let token = GitHubAuthService.shared.getAccessTokenFromKeychain() ?? ""
+        // This is called by GitHubRepoListView
+        // The actual handling is done in the sheet(item:) modifier
+    }
+    
+    private func performImport(repos: [GitHubRepository]) async {
+        let token = GitHubAuthService.shared.getAccessTokenFromKeychain() ?? ""
+        
+        for repo in repos {
+            // Create new Project
+            var project = Project(
+                name: repo.name,
+                source: .github,
+                githubFullName: repo.fullName
+            )
             
-            for repo in repos {
-                // Add repo itself
-                let repoTech = Technology(
-                    name: repo.name,
-                    type: .github,
-                    identifier: repo.fullName,
-                    category: .devops,
-                    currentVersion: "",
-                    latestVersion: ""
+            // Detect dependencies
+            do {
+                let files = try await GitHubAuthService.shared.detectDependencyFiles(
+                    in: repo,
+                    token: token
                 )
-                await MainActor.run {
-                    viewModel.addTechnology(repoTech)
-                }
                 
-                // Detect dependencies
-                do {
+                for file in files {
+                    let detectedDeps = try await GitHubAuthService.shared.parseDependencies(
+                        from: file,
+                        token: token
+                    )
+                    
+                    for dep in detectedDeps {
+                        let techType = TechnologyKnowledge.techType(from: dep.ecosystem)
+                        let category = dep.isDev ? .devops : TechnologyKnowledge.classify(
+                            name: dep.name,
+                            ecosystem: techType
+                        )
+                        
+                        let dependency = Dependency(
+                            name: dep.name,
+                            type: techType,
+                            category: category,
+                            currentVersion: dep.version,
+                            latestVersion: nil
+                        )
+                        project.dependencies.append(dependency)
+                    }
+                }
+            } catch {
+                print("⚠️ Failed to detect deps for \(repo.name): \(error)")
+            }
+            
+            await MainActor.run {
+                viewModel.addProject(project)
+            }
+            
+            print("✅ Imported project: \(project.name) with \(project.dependencyCount) dependencies")
+        }
+        
+        await MainActor.run {
+            dismiss()
+        }
+    }
+}
+
+// MARK: - Import Preview View
+
+struct ImportPreviewView: View {
+    let repositories: [GitHubRepository]
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+    
+    @State private var isScanning = true
+    @State private var scanResults: [(repo: GitHubRepository, files: [GitHubFile], deps: [DetectedDependency])] = []
+    @State private var errorMessage: String?
+    
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Theme.background.ignoresSafeArea()
+                
+                VStack(spacing: 0) {
+                    if isScanning {
+                        Spacer()
+                        VStack(spacing: 20) {
+                            ProgressView()
+                                .scaleEffect(1.5)
+                                .tint(Theme.accent)
+                            
+                            Text("Scanning \(repositories.count) repo\(repositories.count == 1 ? "" : "s")...")
+                                .font(.headline)
+                                .foregroundStyle(Theme.textPrimary)
+                            
+                            Text("Detecting package.json, requirements.txt, and other dependency files")
+                                .font(.caption)
+                                .foregroundStyle(Theme.textSecondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
+                        }
+                        Spacer()
+                    } else if let error = errorMessage {
+                        Spacer()
+                        VStack(spacing: 16) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 48))
+                                .foregroundStyle(.orange)
+                            Text(error)
+                                .foregroundStyle(Theme.textPrimary)
+                                .multilineTextAlignment(.center)
+                            Button("Try Again") {
+                                startScan()
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                        .padding(.horizontal, 32)
+                        Spacer()
+                    } else {
+                        ScrollView {
+                            VStack(spacing: 16) {
+                                ForEach(scanResults, id: \.repo.id) { result in
+                                    RepoScanResultCard(
+                                        repo: result.repo,
+                                        files: result.files,
+                                        deps: result.deps
+                                    )
+                                }
+                            }
+                            .padding(16)
+                        }
+                        
+                        // Bottom action bar
+                        VStack(spacing: 12) {
+                            let totalDeps = scanResults.reduce(0) { $0 + $1.deps.count }
+                            let totalFiles = scanResults.reduce(0) { $0 + $1.files.count }
+                            
+                            Text("Found \(totalDeps) dependencies across \(totalFiles) files")
+                                .font(.subheadline)
+                                .foregroundStyle(Theme.textSecondary)
+                            
+                            HStack(spacing: 12) {
+                                Button("Cancel") {
+                                    onCancel()
+                                }
+                                .foregroundStyle(Theme.textSecondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color(hex: 0x1A1A1A))
+                                )
+                                
+                                Button {
+                                    onConfirm()
+                                } label: {
+                                    Text("Import \(totalDeps) Dependencies")
+                                        .font(.headline)
+                                        .foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 16)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .fill(Theme.accent)
+                                        )
+                                }
+                            }
+                        }
+                        .padding(16)
+                        .background(
+                            Rectangle()
+                                .fill(Theme.background)
+                                .shadow(color: .black.opacity(0.3), radius: 8, y: -4)
+                        )
+                    }
+                }
+            }
+            .navigationTitle("Import Preview")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                    .foregroundStyle(Theme.textSecondary)
+                }
+            }
+            .onAppear {
+                startScan()
+            }
+        }
+    }
+    
+    private func startScan() {
+        isScanning = true
+        errorMessage = nil
+        scanResults = []
+        
+        print("🔍🔍🔍 ImportPreview: Starting scan for \(repositories.count) repos")
+        
+        Task {
+            do {
+                let token = GitHubAuthService.shared.getAccessTokenFromKeychain() ?? ""
+                print("🔍 Token length: \(token.count)")
+                
+                var results: [(GitHubRepository, [GitHubFile], [DetectedDependency])] = []
+                
+                for repo in repositories {
+                    print("🔍 Scanning repo: \(repo.fullName)")
+                    
                     let files = try await GitHubAuthService.shared.detectDependencyFiles(
                         in: repo,
                         token: token
                     )
+                    print("🔍 Found \(files.count) dependency files in \(repo.name)")
                     
+                    var allDeps: [DetectedDependency] = []
                     for file in files {
-                        let deps = try await GitHubAuthService.shared.parseDependencies(
-                            from: file,
-                            token: token
-                        )
-                        
-                        for dep in deps {
-                            let depType: TechType = dep.ecosystem == .npm ? .npm : .language
-                            let depTech = Technology(
-                                name: dep.name,
-                                type: depType,
-                                identifier: "\(dep.ecosystem.rawValue):\(dep.name)",
-                                category: .backend,
-                                currentVersion: dep.version,
-                                latestVersion: dep.version
+                        print("🔍 Parsing file: \(file.name)")
+                        do {
+                            let deps = try await GitHubAuthService.shared.parseDependencies(
+                                from: file,
+                                token: token
                             )
-                            await MainActor.run {
-                                viewModel.addTechnology(depTech)
-                            }
+                            print("🔍 Parsed \(deps.count) deps from \(file.name)")
+                            allDeps.append(contentsOf: deps)
+                        } catch {
+                            print("❌ Failed to parse \(file.name): \(error)")
                         }
                     }
-                } catch {
-                    print("⚠️ Failed to detect deps for \(repo.name): \(error)")
+                    
+                    results.append((repo, files, allDeps))
+                }
+                
+                print("✅ Scan complete. Total repos: \(results.count)")
+                
+                await MainActor.run {
+                    self.scanResults = results
+                    self.isScanning = false
+                }
+            } catch {
+                print("❌ Scan failed: \(error)")
+                await MainActor.run {
+                    self.errorMessage = "Error: \(error.localizedDescription)"
+                    self.isScanning = false
                 }
             }
         }
-        showRepoList = false
-        dismiss()
+    }
+}
+
+struct RepoScanResultCard: View {
+    let repo: GitHubRepository
+    let files: [GitHubFile]
+    let deps: [DetectedDependency]
+    @State private var isExpanded = true
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(repo.name)
+                        .font(.headline)
+                        .foregroundStyle(Theme.textPrimary)
+                    
+                    HStack(spacing: 8) {
+                        Label("\(files.count) file\(files.count == 1 ? "" : "s")", systemImage: "doc.text")
+                            .font(.caption)
+                        Label("\(deps.count) dep\(deps.count == 1 ? "" : "s")", systemImage: "shippingbox")
+                            .font(.caption)
+                    }
+                    .foregroundStyle(Theme.textSecondary)
+                }
+                
+                Spacer()
+                
+                Button {
+                    withAnimation(.spring(duration: 0.3)) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .foregroundStyle(Theme.textSecondary)
+                }
+            }
+            
+            if isExpanded {
+                Divider()
+                    .background(Theme.border)
+                
+                if files.isEmpty {
+                    HStack {
+                        Image(systemName: "exclamationmark.circle")
+                            .foregroundStyle(.orange)
+                        Text("No dependency files detected")
+                            .font(.caption)
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    .padding(.vertical, 8)
+                } else {
+                    // Files found
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Detected Files")
+                            .font(.caption)
+                            .foregroundStyle(Theme.textSecondary)
+                            .textCase(.uppercase)
+                        
+                        ForEach(files, id: \.sha) { file in
+                            HStack {
+                                Image(systemName: iconForFile(file.name))
+                                    .foregroundStyle(Theme.accent)
+                                Text(file.name)
+                                    .font(.subheadline)
+                                    .foregroundStyle(Theme.textPrimary)
+                                Spacer()
+                                Text(ecosystemForFile(file.name))
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.textSecondary)
+                            }
+                        }
+                    }
+                    
+                    if !deps.isEmpty {
+                        Divider()
+                            .background(Theme.border)
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Sample Dependencies")
+                                .font(.caption)
+                                .foregroundStyle(Theme.textSecondary)
+                                .textCase(.uppercase)
+                            
+                            ForEach(deps.prefix(5), id: \.id) { dep in
+                                let techType = TechnologyKnowledge.techType(from: dep.ecosystem)
+                                let category = dep.isDev ? .devops : TechnologyKnowledge.classify(
+                                    name: dep.name,
+                                    ecosystem: techType
+                                )
+                                
+                                HStack {
+                                    Text(dep.name)
+                                        .font(.subheadline)
+                                        .foregroundStyle(Theme.textPrimary)
+                                    Spacer()
+                                    Text(category.rawValue)
+                                        .font(.caption)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 2)
+                                        .background(categoryColor(category).opacity(0.2))
+                                        .foregroundStyle(categoryColor(category))
+                                        .clipShape(Capsule())
+                                }
+                            }
+                            
+                            if deps.count > 5 {
+                                Text("+ \(deps.count - 5) more")
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.textSecondary)
+                                    .padding(.top, 4)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(Color(hex: 0x1A1A1A))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Theme.border, lineWidth: 1)
+        )
+    }
+    
+    private func iconForFile(_ name: String) -> String {
+        switch name {
+        case "package.json": return "shippingbox.fill"
+        case "go.mod", "go.sum": return "g.square.fill"
+        case "Cargo.toml", "Cargo.lock": return "cube.fill"
+        case "requirements.txt", "pyproject.toml": return "leaf.fill"
+        case "Gemfile", "Gemfile.lock": return "diamond"
+        case "composer.json", "composer.lock": return "c.square"
+        default: return "doc.text.fill"
+        }
+    }
+    
+    private func ecosystemForFile(_ name: String) -> String {
+        switch name {
+        case "package.json": return "NPM"
+        case "go.mod", "go.sum": return "Go"
+        case "Cargo.toml", "Cargo.lock": return "Cargo"
+        case "requirements.txt", "pyproject.toml": return "Python"
+        case "Gemfile", "Gemfile.lock": return "Ruby"
+        case "composer.json", "composer.lock": return "PHP"
+        default: return "Unknown"
+        }
+    }
+    
+    private func categoryColor(_ category: TechCategory) -> Color {
+        switch category {
+        case .frontend: return .blue
+        case .backend: return .green
+        case .database: return .orange
+        case .devops: return .purple
+        case .language: return .cyan
+        case .other: return .gray
+        }
     }
 }

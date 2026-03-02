@@ -9,8 +9,10 @@ struct MainTabView: View {
                 PulseView(viewModel: viewModel)
             }
 
-            Tab("Stack", systemImage: "square.stack.3d.up.fill") {
-                StackView(viewModel: viewModel)
+            Tab("Projects", systemImage: "folder.fill") {
+                NavigationStack {
+                    ProjectListView(viewModel: viewModel)
+                }
             }
 
             Tab("Alerts", systemImage: "bell.badge.fill") {
@@ -23,15 +25,5 @@ struct MainTabView: View {
             }
         }
         .tint(Theme.accent)
-        .task {
-            if let lastSync = viewModel.lastSyncTime {
-                let hourAgo = Date().addingTimeInterval(-3600)
-                if lastSync < hourAgo {
-                    await viewModel.syncStack()
-                }
-            } else if !viewModel.stackItems.isEmpty {
-                await viewModel.syncStack()
-            }
-        }
     }
 }

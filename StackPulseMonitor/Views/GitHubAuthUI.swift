@@ -197,7 +197,6 @@ struct GitHubRepoListView: View {
                             Button {
                                 let selected = repositories.filter { selectedRepos.contains($0.id) }
                                 onReposSelected?(selected)
-                                dismiss()
                             } label: {
                                 Text("Import \(selectedRepos.count) Repo\(selectedRepos.count == 1 ? "" : "s")")
                                     .font(.headline)

@@ -1,13 +1,25 @@
 import SwiftUI
 
+// Import shared types (already defined in StackView.swift)
+private enum SetupImportSheetType: Identifiable {
+    case repoList
+    case importPreview([GitHubRepository])
+    
+    var id: String {
+        switch self {
+        case .repoList: return "repoList"
+        case .importPreview: return "importPreview"
+        }
+    }
+}
+
 struct StackSetupView: View {
     let viewModel: AppViewModel
     let onComplete: () -> Void
     
     // GitHub OAuth
     @StateObject private var authService = GitHubAuthService.shared
-    @State private var showRepoList = false
-
+    @State private var showRepoList = false  // Deprecated, use activeSheet
 
     @State private var selectedPresets: Set<String> = []
     @State private var customName = ""
@@ -55,7 +67,7 @@ struct StackSetupView: View {
                                     }
                                     
                                     Button {
-                                        showRepoList = true
+                                            activeSheet = .repoList
                                     } label: {
                                         HStack {
                                             Image(systemName: "minus.circle")
@@ -71,7 +83,7 @@ struct StackSetupView: View {
                                 }
                             } else {
                                 GitHubAuthButton {
-                                    showRepoList = true
+                                    activeSheet = .repoList
                                 }
                             }
                         }
@@ -117,26 +129,25 @@ struct StackSetupView: View {
                         .padding(16)
                         .cardStyle()
 
-                        if !viewModel.stackItems.isEmpty {
+                        if !viewModel.projects.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
-                                Text("Your Stack (\(viewModel.stackItems.count))")
+                                Text("Your Projects (\(viewModel.projects.count))")
                                     .font(.headline)
                                     .foregroundStyle(Theme.textPrimary)
 
-                                ForEach(viewModel.stackItems) { tech in
+                                ForEach(viewModel.projects) { project in
                                     HStack {
                                         VStack(alignment: .leading, spacing: 2) {
-                                            Text(tech.name)
+                                            Text(project.name)
                                                 .font(.subheadline.weight(.medium))
                                                 .foregroundStyle(Theme.textPrimary)
-                                            Text(tech.category.rawValue)
+                                            Text("\(project.dependencyCount) dependencies")
                                                 .font(.caption)
                                                 .foregroundStyle(Theme.textSecondary)
                                         }
                                         Spacer()
                                         Button {
-                                            viewModel.removeTechnology(tech)
-                                            selectedPresets.remove(tech.name)
+                                            viewModel.removeProject(project, deleteDependencies: true)
                                         } label: {
                                             Image(systemName: "xmark.circle.fill")
                                                 .foregroundStyle(Theme.textSecondary)
@@ -171,10 +182,10 @@ struct StackSetupView: View {
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
-                    .background(viewModel.stackItems.isEmpty ? Theme.muted : Theme.accent)
+                    .background(viewModel.projects.isEmpty ? Theme.muted : Theme.accent)
                     .clipShape(.rect(cornerRadius: 14))
                 }
-                .disabled(viewModel.stackItems.isEmpty)
+                .disabled(viewModel.projects.isEmpty)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 16)
                 .background(
@@ -186,22 +197,84 @@ struct StackSetupView: View {
                 )
             }
         }
-        .sheet(isPresented: $showRepoList) {
-            GitHubRepoListView(onReposSelected: { repos in
-                // Convert GitHub repos to Technology and add to stack
-                for repo in repos {
-                    let tech = Technology(
-                        name: repo.name,
-                        type: .github,
-                        identifier: repo.fullName,
-                        category: .devops,
-                        currentVersion: "",
-                        latestVersion: ""
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .repoList:
+                GitHubRepoListView(onReposSelected: { repos in
+                    pendingImportRepos = repos
+                    activeSheet = .importPreview(repos)
+                })
+            case .importPreview(let repos):
+                // Reuse ImportPreviewView from StackView.swift
+                ImportPreviewView(
+                    repositories: repos,
+                    onConfirm: {
+                        Task {
+                            await performImport(repos: repos)
+                            activeSheet = nil
+                        }
+                    },
+                    onCancel: {
+                        activeSheet = nil
+                    }
+                )
+            }
+        }
+    }
+
+    @State private var activeSheet: SetupImportSheetType?
+    @State private var pendingImportRepos: [GitHubRepository] = []
+
+    private func performImport(repos: [GitHubRepository]) async {
+        let token = GitHubAuthService.shared.getAccessTokenFromKeychain() ?? ""
+        
+        for repo in repos {
+            // Create Project
+            var project = Project(
+                name: repo.name,
+                source: .github,
+                githubFullName: repo.fullName
+            )
+            
+            // Detect dependencies
+            do {
+                let files = try await GitHubAuthService.shared.detectDependencyFiles(
+                    in: repo,
+                    token: token
+                )
+                
+                for file in files {
+                    let detectedDeps = try await GitHubAuthService.shared.parseDependencies(
+                        from: file,
+                        token: token
                     )
-                    viewModel.addTechnology(tech)
+                    
+                    for dep in detectedDeps {
+                        let techType = TechnologyKnowledge.techType(from: dep.ecosystem)
+                        let category = dep.isDev ? .devops : TechnologyKnowledge.classify(
+                            name: dep.name,
+                            ecosystem: techType
+                        )
+                        
+                        let dependency = Dependency(
+                            name: dep.name,
+                            type: techType,
+                            category: category,
+                            currentVersion: dep.version,
+                            latestVersion: nil
+                        )
+                        project.dependencies.append(dependency)
+                    }
                 }
-                showRepoList = false
-            })
+            } catch {
+                print("⚠️ Failed to detect deps for \(repo.name): \(error)")
+            }
+            
+            await MainActor.run {
+                viewModel.addProject(project)
+            }
+            
+            print("✅ Imported project: \(project.name) with \(project.dependencyCount) deps")
         }
     }
 

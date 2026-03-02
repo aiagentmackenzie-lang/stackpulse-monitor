@@ -409,10 +409,10 @@ class AppViewModel {
     }
     
     /// Check versions for all dependencies in a project
-    func checkVersions(for project: Project) async {
+    func checkVersions(forProjectId projectId: UUID) async {
         let service = VersionCheckService.shared
         
-        guard let projectIndex = projects.firstIndex(where: { $0.id == project.id }) else {
+        guard let projectIndex = projects.firstIndex(where: { $0.id == projectId }) else {
             return
         }
         
@@ -424,7 +424,7 @@ class AppViewModel {
                 
                 await MainActor.run {
                     updateDependency(
-                        projectId: project.id,
+                        projectId: projectId,
                         dependencyId: dep.id,
                         latestVersion: latest,
                         isOutdated: isOutdated

@@ -2,11 +2,20 @@ import SwiftUI
 
 /// Detail view for a single project showing its dependencies
 struct ProjectDetailView: View {
-    let project: Project
+    let projectId: UUID
     @Bindable var viewModel: AppViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var isChecking = false
     @State private var checkProgress: Double = 0
+    
+    // Look up project from viewModel so updates are live
+    private var project: Project {
+        viewModel.projects.first { $0.id == projectId } ?? Project(
+            name: "Unknown",
+            source: .manual,
+            dependencies: []
+        )
+    }
     
     var body: some View {
         ScrollView {
@@ -196,7 +205,7 @@ struct ProjectDetailView: View {
         isChecking = true
         checkProgress = 0
         
-        await viewModel.checkVersions(for: project)
+        await viewModel.checkVersions(forProjectId: projectId)
         
         isChecking = false
     }
@@ -303,22 +312,23 @@ struct StatBadge: View {
 // MARK: - Preview
 
 #Preview("Project Detail") {
-    NavigationStack {
-        ProjectDetailView(
-            project: Project(
-                name: "MyRepo",
-                source: .github,
-                githubFullName: "raphael/myrepo",
-                dependencies: [
-                    Dependency(name: "react", type: .npm, category: .frontend, currentVersion: "18.2.0", latestVersion: "19.0.0", isOutdated: true),
-                    Dependency(name: "vue", type: .npm, category: .frontend, currentVersion: "3.4.0", latestVersion: "3.4.0", isOutdated: false),
-                    Dependency(name: "express", type: .npm, category: .backend, currentVersion: "4.18.0", latestVersion: "4.19.0", isOutdated: true),
-                    Dependency(name: "lodash", type: .npm, category: .backend, currentVersion: "4.17.21", latestVersion: nil, isOutdated: false),
-                    Dependency(name: "jest", type: .npm, category: .devops, currentVersion: "29.0.0", latestVersion: "30.0.0", isOutdated: true)
-                ]
-            ),
-            viewModel: AppViewModel()
-        )
+    let vm = AppViewModel()
+    let project = Project(
+        name: "MyRepo",
+        source: .github,
+        githubFullName: "raphael/myrepo",
+        dependencies: [
+            Dependency(name: "react", type: .npm, category: .frontend, currentVersion: "18.2.0", latestVersion: "19.0.0", isOutdated: true),
+            Dependency(name: "vue", type: .npm, category: .frontend, currentVersion: "3.4.0", latestVersion: "3.4.0", isOutdated: false),
+            Dependency(name: "express", type: .npm, category: .backend, currentVersion: "4.18.0", latestVersion: "4.19.0", isOutdated: true),
+            Dependency(name: "lodash", type: .npm, category: .backend, currentVersion: "4.17.21", latestVersion: nil, isOutdated: false),
+            Dependency(name: "jest", type: .npm, category: .devops, currentVersion: "29.0.0", latestVersion: "30.0.0", isOutdated: true)
+        ]
+    )
+    vm.projects = [project]
+    
+    return NavigationStack {
+        ProjectDetailView(projectId: project.id, viewModel: vm)
     }
     .preferredColorScheme(.dark)
 }
