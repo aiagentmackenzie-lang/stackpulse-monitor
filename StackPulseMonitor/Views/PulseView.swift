@@ -27,7 +27,7 @@ struct PulseView: View {
             .navigationTitle("Pulse")
             .sheet(item: $selectedProject) { project in
                 NavigationStack {
-                    ProjectDetailView(project: project)
+                    ProjectDetailView(project: project, viewModel: viewModel)
                         .toolbar {
                             ToolbarItem(placement: .topBarLeading) {
                                 Button("Done") {

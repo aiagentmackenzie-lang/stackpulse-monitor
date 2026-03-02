@@ -3,6 +3,10 @@ import SwiftUI
 @Observable
 @MainActor
 class AppViewModel {
+    // MARK: - Project-Centric Model (New)
+    var projects: [Project] = []
+    
+    // MARK: - Legacy Support (Migration)
     var stackItems: [Technology] = []
     var alerts: [TechAlert] = []
     var openAIKey: String = ""
@@ -15,6 +19,10 @@ class AppViewModel {
 
     private let storage = StorageService.shared
     private let network = NetworkService.shared
+    
+    // MARK: - Computed Properties
+    var totalDependencies: Int { projects.reduce(0) { $0 + $1.dependencyCount } }
+    var totalOutdated: Int { projects.reduce(0) { $0 + $1.outdatedCount } }
 
     var healthScore: Int {
         var score = 100
@@ -37,17 +45,68 @@ class AppViewModel {
     var activeAlerts: [TechAlert] { alerts.filter { !$0.isDismissed && ($0.snoozedUntil == nil || $0.snoozedUntil! < Date()) } }
 
     func loadFromStorage() {
-        stackItems = storage.loadStack()
+        // Load new project-centric data
+        projects = storage.loadProjects()
+        
+        // Legacy support: migrate old stack if projects is empty
+        if projects.isEmpty {
+            let legacyStack = storage.loadStack()
+            if !legacyStack.isEmpty {
+                migrateLegacyStack(legacyStack)
+            }
+        }
+        
         alerts = storage.loadAlerts()
         openAIKey = storage.loadOpenAIKey() ?? ""
         lastSyncTime = storage.loadLastSync()
         hasOnboarded = storage.hasOnboarded()
-        hasCompletedSetup = storage.hasStack()
+        hasCompletedSetup = !projects.isEmpty
+    }
+    
+    private func migrateLegacyStack(_ legacy: [Technology]) {
+        // Group legacy items by source/repo
+        let grouped = Dictionary(grouping: legacy) { tech in
+            if tech.type == .github {
+                return tech.name
+            }
+            return "Legacy Imports"
+        }
+        
+        for (name, items) in grouped {
+            var project = Project(
+                name: name,
+                source: items.first?.type == .github ? .github : .manual
+            )
+            
+            if items.first?.type == .github {
+                project.githubFullName = items.first?.identifier
+            }
+            
+            // Convert Technologies to Dependencies
+            project.dependencies = items.compactMap { tech in
+                guard tech.type != .github else { return nil } // Skip the repo itself
+                return Dependency(
+                    name: tech.name,
+                    type: tech.type,
+                    category: tech.category,
+                    currentVersion: tech.currentVersion,
+                    latestVersion: tech.latestVersion
+                )
+            }
+            
+            projects.append(project)
+        }
+        
+        storage.saveProjects(projects)
     }
 
     func saveOpenAIKey(_ key: String) {
         openAIKey = key
         storage.saveOpenAIKey(key)
+    }
+
+    func persistProjects() {
+        storage.saveProjects(projects)
     }
 
     func completeOnboarding() {
@@ -282,5 +341,96 @@ class AppViewModel {
         let latestParts = latest.split(separator: ".").compactMap { Int($0) }
         guard let cMajor = currentParts.first, let lMajor = latestParts.first else { return false }
         return lMajor > cMajor
+    }
+    
+    // MARK: - Project Management
+    
+    func addProject(_ project: Project) {
+        projects.append(project)
+        storage.saveProjects(projects)
+    }
+    
+    func removeProject(_ project: Project, deleteDependencies: Bool = true) {
+        if let index = projects.firstIndex(where: { $0.id == project.id }) {
+            if deleteDependencies {
+                // Dependencies are part of project, so they auto-delete
+                projects.remove(at: index)
+            } else {
+                // Orphan dependencies - convert to manual project
+                var orphaned = project
+                orphaned.source = .manual
+                orphaned.githubFullName = nil
+                orphaned.dependencies = []
+                projects.remove(at: index)
+                projects.append(orphaned)
+            }
+            storage.saveProjects(projects)
+        }
+    }
+    
+    func addDependency(_ dependency: Dependency, to projectId: UUID) {
+        if let index = projects.firstIndex(where: { $0.id == projectId }) {
+            projects[index].dependencies.append(dependency)
+            storage.saveProjects(projects)
+        }
+    }
+    
+    func removeDependency(_ dependencyId: UUID, from projectId: UUID) {
+        if let index = projects.firstIndex(where: { $0.id == projectId }) {
+            projects[index].dependencies.removeAll { $0.id == dependencyId }
+            storage.saveProjects(projects)
+        }
+    }
+    
+    func toggleProjectExpansion(_ project: Project) {
+        if let index = projects.firstIndex(where: { $0.id == project.id }) {
+            projects[index].isExpanded.toggle()
+        }
+    }
+    
+    // MARK: - Version Checking
+    
+    /// Update a single dependency's latest version and persist
+    func updateDependency(
+        projectId: UUID,
+        dependencyId: UUID,
+        latestVersion: String,
+        isOutdated: Bool
+    ) {
+        if let projectIndex = projects.firstIndex(where: { $0.id == projectId }),
+           let depIndex = projects[projectIndex].dependencies.firstIndex(where: { $0.id == dependencyId }) {
+            
+            projects[projectIndex].dependencies[depIndex].latestVersion = latestVersion
+            projects[projectIndex].dependencies[depIndex].isOutdated = isOutdated
+            projects[projectIndex].dependencies[depIndex].lastChecked = Date()
+            
+            storage.saveProjects(projects)
+        }
+    }
+    
+    /// Check versions for all dependencies in a project
+    func checkVersions(for project: Project) async {
+        let service = VersionCheckService.shared
+        
+        guard let projectIndex = projects.firstIndex(where: { $0.id == project.id }) else {
+            return
+        }
+        
+        let deps = projects[projectIndex].dependencies
+        
+        for dep in deps {
+            if let latest = await service.checkVersion(dep) {
+                let isOutdated = !dep.currentVersion.isEmpty && dep.currentVersion != latest
+                
+                await MainActor.run {
+                    updateDependency(
+                        projectId: project.id,
+                        dependencyId: dep.id,
+                        latestVersion: latest,
+                        isOutdated: isOutdated
+                    )
+                }
+            }
+        }
     }
 }

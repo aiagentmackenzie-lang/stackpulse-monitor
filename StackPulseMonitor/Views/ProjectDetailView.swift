@@ -3,6 +3,8 @@ import SwiftUI
 /// Detail view for a single project showing its dependencies
 struct ProjectDetailView: View {
     let project: Project
+    @Bindable var viewModel: AppViewModel
+    @Environment(\.dismiss) private var dismiss
     @State private var isChecking = false
     @State private var checkProgress: Double = 0
     
@@ -194,19 +196,7 @@ struct ProjectDetailView: View {
         isChecking = true
         checkProgress = 0
         
-        let service = VersionCheckService.shared
-        let deps = project.dependencies
-        let total = deps.count
-        
-        for (index, dep) in deps.enumerated() {
-            if let latest = await service.checkVersion(dep) {
-                // Update dependency in-place (this is a value type, so we need to update via Store/AppViewModel)
-                // For now, print the result
-                print("✅ \(dep.name): \(dep.currentVersion) → \(latest)")
-            }
-            
-            checkProgress = Double(index + 1) / Double(total)
-        }
+        await viewModel.checkVersions(for: project)
         
         isChecking = false
     }
@@ -326,7 +316,8 @@ struct StatBadge: View {
                     Dependency(name: "lodash", type: .npm, category: .backend, currentVersion: "4.17.21", latestVersion: nil, isOutdated: false),
                     Dependency(name: "jest", type: .npm, category: .devops, currentVersion: "29.0.0", latestVersion: "30.0.0", isOutdated: true)
                 ]
-            )
+            ),
+            viewModel: AppViewModel()
         )
     }
     .preferredColorScheme(.dark)
