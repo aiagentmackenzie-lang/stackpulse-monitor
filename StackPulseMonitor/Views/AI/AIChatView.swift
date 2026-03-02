@@ -10,6 +10,7 @@ struct AIChatView: View {
     @State private var inputText = ""
     @State private var isStreaming = false
     @State private var scrollProxy: ScrollViewProxy?
+    @State private var streamingMessageIndex: Int?
     
     init(project: Project, viewModel: AppViewModel) {
         self.project = project
@@ -34,7 +35,7 @@ struct AIChatView: View {
                                 WelcomeSection(project: project)
                             }
                             
-                            ForEach(thread.messages) { message in
+                            ForEach(Array(thread.messages.enumerated()), id: \.element.id) { _, message in
                                 ChatMessageBubble(
                                     message: message,
                                     isUser: message.role == .user
@@ -94,45 +95,77 @@ struct AIChatView: View {
         thread.messages.append(userMessage)
         inputText = ""
         
-        // Simulate AI response (will replace with OpenAI integration)
-        isStreaming = true
-        Task {
-            // Small delay to simulate processing
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            
-            let aiResponse = AIMessage(
+        // Check for OpenAI key
+        guard !viewModel.openAIKey.isEmpty else {
+            let errorMessage = AIMessage(
                 role: .assistant,
-                content: generateAIResponse(to: messageText, project: project)
+                content: "⚠️ Please configure your OpenAI API key in Settings to use AI chat."
             )
-            
-            await MainActor.run {
-                thread.messages.append(aiResponse)
-                thread.updatedAt = Date()
-                isStreaming = false
-                saveThread()
-            }
+            thread.messages.append(errorMessage)
+            saveThread()
+            return
         }
-    }
-    
-    private func generateAIResponse(to query: String, project: Project) -> String {
-        // Simulation - will be replaced with OpenAI
-        let lowerQuery = query.lowercased()
         
-        if lowerQuery.contains("update") {
-            let outdated = project.outdatedCount
-            if outdated > 0 {
-                return "📦 You have \(outdated) outdated \(outdated == 1 ? "dependency" : "dependencies") in \(project.name).\n\nWould you like me to analyze which ones are safe to update?"
-            } else {
-                return "✅ All dependencies in \(project.name) are up to date!"
+        // Configure and send
+        Task {
+            await OpenAIService.shared.configure(apiKey: viewModel.openAIKey)
+            
+            isStreaming = true
+            
+            // Create empty assistant message for streaming
+            let streamingMessage = AIMessage(role: .assistant, content: "", isStreaming: true)
+            await MainActor.run {
+                thread.messages.append(streamingMessage)
             }
-        } else if lowerQuery.contains("critical") || lowerQuery.contains("security") {
-            return "🔒 Currently scanning for critical vulnerabilities...\n\n(This feature will be fully available once OpenAI integration is complete)"
-        } else if lowerQuery.contains("hello") || lowerQuery.contains("hi") {
-            return "👋 Hello! I'm your AI assistant for \(project.name).\n\nI can help you:\n• Analyze dependencies\n• Check for vulnerabilities\n• Recommend updates\n• Explain breaking changes\n\nWhat would you like to know?"
-        } else if lowerQuery.contains("dependency") || lowerQuery.contains("deps") {
-            return "📊 \(project.name) has \(project.dependencyCount) dependencies.\n\n• \(project.outdatedCount) need updates\n• Recent analysis available in the Reports tab\n\nAsk me about specific dependencies!"
-        } else {
-            return "💡 I'm here to help with dependency analysis for \(project.name).\n\nTry asking:\n• \"Which dependencies need updating?\"\n• \"Are there any critical vulnerabilities?\"\n• \"What does [dependency] do?\""
+            let messageIndex = thread.messages.count - 1
+            
+            // Build system prompt with project context
+            let systemPrompt = AIContextBuilder.buildSystemPrompt(for: project)
+            let extraContext = AIContextBuilder.buildMessageContext(project: project, userMessage: messageText)
+            
+            let fullSystem = extraContext.isEmpty ? systemPrompt : "\(systemPrompt)\n\nCurrent context:\n\(extraContext)"
+            
+            do {
+                // Stream response
+                let stream = try await OpenAIService.shared.streamMessage(
+                    project: project,
+                    messages: thread.messages.filter { !$0.isStreaming },
+                    systemPrompt: fullSystem
+                )
+                
+                // Collect all content
+                var fullContent = ""
+                for await chunk in stream {
+                    fullContent += chunk
+                    await MainActor.run {
+                        if thread.messages.indices.contains(messageIndex) {
+                            thread.messages[messageIndex].content = fullContent
+                        }
+                    }
+                }
+                
+                // Finalize
+                await MainActor.run {
+                    if thread.messages.indices.contains(messageIndex) {
+                        thread.messages[messageIndex].isStreaming = false
+                    }
+                    thread.updatedAt = Date()
+                    isStreaming = false
+                    saveThread()
+                }
+                
+            } catch {
+                // Show error
+                await MainActor.run {
+                    if thread.messages.indices.contains(messageIndex) {
+                        thread.messages[messageIndex].content = "❌ Error: \(error.localizedDescription)\n\nPlease check your OpenAI API key and try again."
+                        thread.messages[messageIndex].isStreaming = false
+                    }
+                    thread.updatedAt = Date()
+                    isStreaming = false
+                    saveThread()
+                }
+            }
         }
     }
     
