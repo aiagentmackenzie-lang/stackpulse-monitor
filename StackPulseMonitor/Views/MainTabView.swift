@@ -4,43 +4,43 @@ struct MainTabView: View {
     let viewModel: AppViewModel
     @Environment(\.scenePhase) private var scenePhase
     @State private var showAISheet = false
-    @State private var selectedTab = 0  // Track active tab
     
     var body: some View {
-        TabView(selection: $selectedTab) {
-            Tab("Pulse", systemImage: "waveform.path.ecg", value: 0) {
+        TabView {
+            Tab("Pulse", systemImage: "waveform.path.ecg") {
                 PulseView(viewModel: viewModel)
             }
 
-            Tab("Projects", systemImage: "folder.fill", value: 1) {
+            Tab("Projects", systemImage: "folder.fill") {
                 NavigationStack {
                     ProjectListView(viewModel: viewModel)
                 }
             }
 
-            // AI Tab (center, prominent) - Purple icon
-            Tab(value: 2) {
-                EmptyView()
-            } label: {
-                Label("AI", systemImage: "sparkles")
-                    .foregroundStyle(.purple)
+            // AI Tab (center, prominent) - Always purple
+            Tab { EmptyView() } label: {
+                VStack(spacing: 4) {
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(.purple)
+                    Text("AI")
+                        .foregroundStyle(.purple)
+                }
+                .onAppear { showAISheet = true }
             }
 
-            Tab("Alerts", systemImage: "bell.badge.fill", value: 3) {
+            Tab("Alerts", systemImage: "bell.badge.fill") {
                 AlertsView(viewModel: viewModel)
             }
             .badge(viewModel.activeAlerts.count)
 
-            Tab("Settings", systemImage: "gearshape.fill", value: 4) {
+            Tab("Settings", systemImage: "gearshape.fill") {
                 SettingsView(viewModel: viewModel)
             }
         }
         .tint(Theme.accent)
-        .onChange(of: selectedTab) { oldTab, newTab in
-            if newTab == 2 {
-                // AI tab tapped - show sheet and revert
-                showAISheet = true
-                selectedTab = oldTab  // Go back to previous tab
+        .onChange(of: showAISheet) { _, isShowing in
+            if isShowing {
+                // Handled by sheet below
             }
         }
         .sheet(isPresented: $showAISheet) {
