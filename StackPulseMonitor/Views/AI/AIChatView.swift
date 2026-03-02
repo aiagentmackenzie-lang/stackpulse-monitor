@@ -33,6 +33,13 @@ struct AIChatView: View {
                             // Welcome if empty
                             if thread.messages.isEmpty {
                                 WelcomeSection(project: project)
+                                
+                                // Quick prompts
+                                QuickPromptsView(prompts: QuickPrompt.defaults) { promptText in
+                                    inputText = promptText
+                                    sendMessage()
+                                }
+                                .padding(.top, 8)
                             }
                             
                             ForEach(Array(thread.messages.enumerated()), id: \.element.id) { _, message in
