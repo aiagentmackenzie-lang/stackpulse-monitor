@@ -34,12 +34,18 @@ struct AIChatView: View {
                             if thread.messages.isEmpty {
                                 WelcomeSection(project: project)
                                 
+                                // Spacer before quick prompts
+                                Spacer(minLength: 32)
+                                
                                 // Quick prompts
                                 QuickPromptsView(prompts: QuickPrompt.defaults) { promptText in
                                     inputText = promptText
                                     sendMessage()
                                 }
-                                .padding(.top, 8)
+                                .padding(.horizontal, 8)
+                                
+                                // Bottom spacer
+                                Spacer(minLength: 20)
                             }
                             
                             ForEach(Array(thread.messages.enumerated()), id: \.element.id) { _, message in
@@ -219,32 +225,45 @@ struct WelcomeSection: View {
     let project: Project
     
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 24) {
+            // Header icon
             Image(systemName: "sparkles")
                 .font(.system(size: 48))
                 .foregroundStyle(.purple)
             
+            // Title
             Text("Ask me anything about \(project.name)")
-                .font(.headline)
+                .font(.title2.weight(.bold))
                 .foregroundStyle(Theme.textPrimary)
                 .multilineTextAlignment(.center)
             
-            VStack(alignment: .leading, spacing: 8) {
-                Text("💡 Try asking:")
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.muted)
+            // Divider for visual separation
+            Divider()
+                .background(Theme.border)
+                .padding(.horizontal, 40)
+                .padding(.vertical, 8)
+            
+            // Try asking section
+            VStack(alignment: .leading, spacing: 12) {
+                Text("💡 Quick questions you can ask:")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("• \"Which dependencies need updating?\"")
                     Text("• \"Are there critical vulnerabilities?\"")
-                    Text("• \"What does React 19 change?\"")
+                    Text("• \"What's the health of my project?\"")
+                    Text("• \"Which updates are safe to apply?\"")
                 }
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundStyle(Theme.textSecondary)
             }
+            .padding(.horizontal, 24)
         }
-        .padding(.top, 40)
-        .padding(.horizontal, 32)
+        .padding(.top, 60)
+        .padding(.bottom, 20)
+        .padding(.horizontal, 16)
     }
 }
 
