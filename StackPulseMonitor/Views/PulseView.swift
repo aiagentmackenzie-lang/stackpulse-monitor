@@ -3,249 +3,386 @@ import SwiftUI
 struct PulseView: View {
     let viewModel: AppViewModel
     @State private var selectedTech: Technology?
+    @State private var isCheckingVersions = false
+    @State private var checkProgress = ""
+    @State private var lastCheckTime: Date?
+    
+    /// Flatten all dependencies from all projects
+    private var allDependencies: [Technology] {
+        viewModel.projects.flatMap { project in
+            project.dependencies.map { dep in
+                Technology(
+                    name: dep.name,
+                    type: dep.type,
+                    identifier: dep.identifier,
+                    category: dep.category,
+                    currentVersion: dep.currentVersion,
+                    latestVersion: dep.latestVersion ?? ""
+                )
+            }
+        }
+    }
+    
+    /// Dependencies with known versions
+    private var checkedDependencies: [Technology] {
+        allDependencies.filter { !$0.latestVersion.isEmpty }
+    }
+    
+    /// Outdated count
+    private var outdatedCount: Int {
+        checkedDependencies.filter { tech in
+            VersionChecker.isOutdated(current: tech.currentVersion, latest: tech.latestVersion)
+        }.count
+    }
+    
+    /// Health score (only for checked deps)
+    private var healthScore: Int? {
+        let checked = checkedDependencies
+        guard !checked.isEmpty else { return nil }
+        let upToDate = checked.count - outdatedCount
+        return Int((Double(upToDate) / Double(checked.count)) * 100)
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    healthScoreCard
-
-                    if viewModel.criticalCount > 0 {
-                        criticalBanner
-                    }
-
-                    if viewModel.openAIKey.isEmpty {
-                        aiKeyBanner
-                    }
-
-                    ForEach(viewModel.stackItems) { tech in
-                        Button {
-                            selectedTech = tech
-                        } label: {
-                            techStatusCard(tech)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 20)
-            }
-            .background(Theme.background)
-            .refreshable {
-                await viewModel.syncStack()
-            }
-            .navigationTitle("")
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "waveform.path.ecg")
-                            .foregroundStyle(Theme.accent)
-                        Text("STACKPULSE")
-                            .font(.headline.bold())
-                            .foregroundStyle(Theme.textPrimary)
-                            .tracking(1)
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task { await viewModel.syncStack() }
-                    } label: {
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.subheadline)
-                                .foregroundStyle(Theme.accent)
-                                .symbolEffect(.rotate, isActive: viewModel.isSyncing)
+                    // Health Score Card
+                    HealthScoreCard(
+                        score: healthScore,
+                        totalDeps: allDependencies.count,
+                        checkedCount: checkedDependencies.count,
+                        outdatedCount: outdatedCount,
+                        lastCheckTime: lastCheckTime,
+                        isChecking: isCheckingVersions,
+                        progress: checkProgress,
+                        onCheck: checkVersions
+                    )
+                    
+                    // Dependencies List
+                    LazyVStack(spacing: 12) {
+                        ForEach(allDependencies) { tech in
+                            Button {
+                                selectedTech = tech
+                            } label: {
+                                techStatusCard(tech)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 20)
                 }
             }
-            .toolbarBackground(Theme.background, for: .navigationBar)
+            .background(Theme.background.ignoresSafeArea())
+            .navigationTitle("Pulse")
             .sheet(item: $selectedTech) { tech in
                 TechnologyDetailView(viewModel: viewModel, technology: tech)
             }
-            .overlay {
-                if viewModel.isSyncing {
-                    VStack {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .tint(Theme.accent)
-                            Text(viewModel.syncProgress)
-                                .font(.caption)
-                                .foregroundStyle(Theme.textSecondary)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(.ultraThinMaterial)
-                        .clipShape(.capsule)
-                        Spacer()
-                    }
-                    .padding(.top, 4)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                }
+            .onAppear {
+                // Load last check time from persistence if available
             }
         }
     }
+    
+    private func checkVersions() {
+        Task {
+            isCheckingVersions = true
+            checkProgress = "Preparing..."
+            
+            // Collect all dependencies from all projects
+            var allDeps: [Dependency] = []
+            var projectMap: [UUID: UUID] = [:] // depID -> projectID
+            
+            for project in viewModel.projects {
+                for dep in project.dependencies where dep.latestVersion == nil {
+                    allDeps.append(dep)
+                    projectMap[dep.id] = project.id
+                }
+            }
+            
+            guard !allDeps.isEmpty else {
+                checkProgress = "All dependencies checked"
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                isCheckingVersions = false
+                lastCheckTime = Date()
+                return
+            }
+            
+            // Check versions
+            let results = await VersionCheckService.shared.checkVersions(allDeps)
+            
+            // Update dependencies
+            await MainActor.run {
+                for (depId, latestVersion) in results {
+                    guard let projectId = projectMap[depId],
+                          let projectIndex = viewModel.projects.firstIndex(where: { $0.id == projectId }),
+                          let depIndex = viewModel.projects[projectIndex].dependencies.firstIndex(where: { $0.id == depId }) else { continue }
+                    
+                    viewModel.projects[projectIndex].dependencies[depIndex].latestVersion = latestVersion
+                    let current = viewModel.projects[projectIndex].dependencies[depIndex].currentVersion
+                    viewModel.projects[projectIndex].dependencies[depIndex].isOutdated = VersionChecker.isOutdated(current: current, latest: latestVersion)
+                }
+                
+                // Save updated projects
+                viewModel.persistProjects()
+            }
+            
+            checkProgress = "Done"
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            isCheckingVersions = false
+            lastCheckTime = Date()
+        }
+    }
+}
 
-    private var healthScoreCard: some View {
+// MARK: - Health Score Card
+
+struct HealthScoreCard: View {
+    let score: Int?
+    let totalDeps: Int
+    let checkedCount: Int
+    let outdatedCount: Int
+    let lastCheckTime: Date?
+    let isChecking: Bool
+    let progress: String
+    let onCheck: () -> Void
+    
+    var body: some View {
         VStack(spacing: 16) {
-            HStack(spacing: 24) {
+            // Score display
+            HStack(spacing: 12) {
+                // Score circle
                 ZStack {
                     Circle()
-                        .stroke(Theme.muted.opacity(0.3), lineWidth: 8)
-                        .frame(width: 100, height: 100)
-
-                    Circle()
-                        .trim(from: 0, to: CGFloat(viewModel.healthScore) / 100)
-                        .stroke(scoreColor, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                        .frame(width: 100, height: 100)
-                        .rotationEffect(.degrees(-90))
-
-                    VStack(spacing: 0) {
-                        Text("\(viewModel.healthScore)")
-                            .font(.system(size: 32, weight: .bold, design: .default))
-                            .foregroundStyle(scoreColor)
-                        Text("/100")
+                        .stroke(scoreColor.opacity(0.3), lineWidth: 8)
+                        .frame(width: 80, height: 80)
+                    
+                    if let score = score {
+                        Circle()
+                            .trim(from: 0, to: CGFloat(score) / 100)
+                            .stroke(scoreColor, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                            .frame(width: 80, height: 80)
+                            .rotationEffect(.degrees(-90))
+                        
+                        VStack(spacing: 0) {
+                            Text("\(score)%")
+                                .font(.title2.weight(.bold))
+                                .foregroundStyle(Theme.textPrimary)
+                            Text(score >= 90 ? "Good" : score >= 70 ? "Fair" : "Needs Attention")
+                                .font(.caption2)
+                                .foregroundStyle(scoreColor)
+                        }
+                    } else {
+                        VStack(spacing: 2) {
+                            Image(systemName: "questionmark.circle")
+                                .font(.title2)
+                                .foregroundStyle(Theme.textSecondary)
+                            Text("?")
+                                .font(.title3)
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                    }
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    if score == nil {
+                        Text("Health Score Unknown")
+                            .font(.headline)
+                            .foregroundStyle(Theme.textPrimary)
+                        
+                        Text("\(totalDeps) dependencies need checking")
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.textSecondary)
+                    } else {
+                        Text("Health Score: \(score!)%")
+                            .font(.headline)
+                            .foregroundStyle(Theme.textPrimary)
+                        
+                        if outdatedCount > 0 {
+                            Text("\(outdatedCount) of \(checkedCount) outdated")
+                                .font(.subheadline)
+                                .foregroundStyle(.orange)
+                        } else {
+                            Text("All \(checkedCount) dependencies up to date")
+                                .font(.subheadline)
+                                .foregroundStyle(.green)
+                        }
+                    }
+                    
+                    if let lastCheck = lastCheckTime {
+                        Text("Last checked: \(formatTimeSince(lastCheck))")
                             .font(.caption)
                             .foregroundStyle(Theme.textSecondary)
                     }
                 }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Stack Health")
-                        .font(.headline)
-                        .foregroundStyle(Theme.textPrimary)
-
-                    statRow(icon: "checkmark.circle.fill", color: Theme.success, label: "Up to date", count: viewModel.upToDateCount)
-                    statRow(icon: "exclamationmark.triangle.fill", color: Theme.warning, label: "Updates", count: viewModel.updateCount)
-                    statRow(icon: "shield.exclamationmark.fill", color: Theme.danger, label: "Critical", count: viewModel.criticalCount)
-                }
-            }
-
-            if let lastSync = viewModel.lastSyncTime {
-                HStack(spacing: 4) {
-                    Image(systemName: "clock")
-                        .font(.caption2)
-                    Text("Synced \(lastSync.relativeString)")
-                        .font(.caption)
-                }
-                .foregroundStyle(Theme.textSecondary)
-            }
-        }
-        .padding(20)
-        .cardStyle()
-    }
-
-    private var scoreColor: Color {
-        if viewModel.healthScore >= 80 { return Theme.success }
-        if viewModel.healthScore >= 60 { return Theme.warning }
-        return Theme.danger
-    }
-
-    private func statRow(icon: String, color: Color, label: String, count: Int) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.caption)
-                .foregroundStyle(color)
-            Text("\(label): \(count)")
-                .font(.subheadline)
-                .foregroundStyle(Theme.textSecondary)
-        }
-    }
-
-    private var criticalBanner: some View {
-        Button {
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.shield.fill")
-                    .foregroundStyle(Theme.danger)
-                Text("\(viewModel.criticalCount) CRITICAL VULNERABILITIES DETECTED")
-                    .font(.caption.bold())
-                    .foregroundStyle(Theme.danger)
+                
                 Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(Theme.danger.opacity(0.7))
             }
-            .padding(14)
-            .background(Theme.danger.opacity(0.1))
-            .clipShape(.rect(cornerRadius: Theme.cardRadius))
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.cardRadius)
-                    .stroke(Theme.danger.opacity(0.3), lineWidth: 1)
-            )
+            
+            // Check button
+            Button(action: onCheck) {
+                HStack {
+                    if isChecking {
+                        ProgressView()
+                            .tint(.white)
+                            .scaleEffect(0.8)
+                        Text(progress)
+                            .font(.subheadline.weight(.semibold))
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                        Text(score == nil ? "Check Dependencies" : "Check for Updates")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(isChecking ? Theme.muted : Theme.accent)
+                .clipShape(.rect(cornerRadius: 10))
+            }
+            .disabled(isChecking)
         }
+        .padding(16)
+        .background(Color(hex: 0x1A1A1A))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Theme.border, lineWidth: 1)
+        )
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
     }
-
-    private var aiKeyBanner: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "brain.head.profile.fill")
-                .foregroundStyle(Theme.accent)
-            Text("Add OpenAI key in Settings for AI summaries")
-                .font(.caption)
-                .foregroundStyle(Theme.textSecondary)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.accent.opacity(0.08))
-        .clipShape(.rect(cornerRadius: 10))
+    
+    private var scoreColor: Color {
+        guard let score = score else { return .gray }
+        if score >= 90 { return .green }
+        if score >= 70 { return .orange }
+        return .red
     }
+    
+    private func formatTimeSince(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+}
 
-    private func techStatusCard(_ tech: Technology) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
+// MARK: - Tech Status Card
+
+extension PulseView {
+    func techStatusCard(_ tech: Technology) -> some View {
+        HStack(spacing: 12) {
+            // Icon
+            Image(systemName: iconForType(tech.type))
+                .font(.title3)
+                .foregroundStyle(categoryColor(tech.category))
+                .frame(width: 40)
+            
+            // Info
+            VStack(alignment: .leading, spacing: 4) {
                 Text(tech.name)
                     .font(.headline)
                     .foregroundStyle(Theme.textPrimary)
+                
+                HStack(spacing: 8) {
+                    Text(tech.currentVersion)
+                        .foregroundStyle(Theme.textSecondary)
 
-                Spacer()
-
-                HStack(spacing: 4) {
-                    Image(systemName: tech.status.icon)
-                        .font(.caption2)
-                    Text(tech.status.label)
-                        .font(.caption.bold())
-                }
-                .foregroundStyle(tech.status.color)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(tech.status.color.opacity(0.12))
-                .clipShape(.capsule)
-            }
-
-            if !tech.latestVersion.isEmpty {
-                HStack(spacing: 4) {
-                    Text("v\(tech.latestVersion)")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.textPrimary)
-                    if !tech.currentVersion.isEmpty {
-                        Text("(your: \(tech.currentVersion))")
-                            .font(.subheadline)
-                            .foregroundStyle(Theme.textSecondary)
+                    if !tech.latestVersion.isEmpty && tech.latestVersion != tech.currentVersion {
+                        Image(systemName: "arrow.forward")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                        Text(tech.latestVersion)
+                            .foregroundStyle(.orange)
                     }
                 }
+                .font(.caption)
             }
-
-            if let summary = tech.aiSummary, !summary.isEmpty {
-                Rectangle()
-                    .fill(Theme.border)
-                    .frame(height: 0.5)
-
-                Text(summary)
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(2)
-            }
-
-            if let lastChecked = tech.lastChecked {
-                HStack {
-                    Spacer()
-                    Text("Last checked: \(lastChecked.relativeString)")
-                        .font(.caption2)
-                        .foregroundStyle(Theme.muted)
+            
+            Spacer()
+            
+            // Status indicator
+            if !tech.latestVersion.isEmpty {
+                if VersionChecker.isOutdated(current: tech.currentVersion, latest: tech.latestVersion) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.callout)
+                } else {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .font(.callout)
                 }
+            } else {
+                Image(systemName: "questionmark.circle")
+                    .foregroundStyle(.gray)
+                    .font(.callout)
             }
         }
         .padding(16)
-        .cardStyle()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(hex: 0x1A1A1A))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
+        .padding(.horizontal, 16)
+    }
+
+    private func categoryColor(_ category: TechCategory) -> Color {
+        switch category {
+        case .frontend: return .blue
+        case .backend: return .green
+        case .database: return .orange
+        case .devops: return .purple
+        case .language: return .cyan
+        case .other: return .gray
+        }
+    }
+
+    private func iconForType(_ type: TechType) -> String {
+        switch type {
+        case .npm: return "shippingbox.fill"
+        case .pypi: return "leaf.fill"
+        case .cargo: return "cube.fill"
+        case .gomod: return "g.circle.fill"
+        case .maven, .gradle: return "j.circle.fill"
+        case .gem: return "diamond.fill"
+        case .composer: return "c.circle.fill"
+        case .github: return "logo.github"
+        case .language: return "chevron.left.forwardslash.chevron.right"
+        case .platform: return "cloud.fill"
+        }
+    }
+}
+
+// MARK: - Version Checker
+
+enum VersionChecker {
+    /// Compares two semantic versions
+    static func isOutdated(current: String, latest: String) -> Bool {
+        let currentParts = current
+            .replacingOccurrences(of: "^", with: "")
+            .replacingOccurrences(of: "~", with: "")
+            .replacingOccurrences(of: "x", with: "0")
+            .split(separator: ".")
+            .compactMap { Int($0.filter { $0.isNumber }) }
+        
+        let latestParts = latest
+            .replacingOccurrences(of: "^", with: "")
+            .replacingOccurrences(of: "~", with: "")
+            .split(separator: ".")
+            .compactMap { Int($0.filter { $0.isNumber }) }
+        
+        // Compare version parts
+        for (c, l) in zip(currentParts, latestParts) {
+            if l > c { return true }
+            if c > l { return false }
+        }
+        
+        // If current has fewer parts, consider it older
+        return latestParts.count > currentParts.count
     }
 }
