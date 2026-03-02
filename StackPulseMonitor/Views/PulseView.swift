@@ -16,12 +16,10 @@ struct PulseView: View {
                     // Header with overall stats
                     headerSection
                     
-                    // AI Banner (when outdated deps exist)
-                    if hasOutdatedDependencies {
-                        AIAnalysisBanner(onAnalyze: {
-                            showProjectPicker = true
-                        })
-                    }
+                    // AI Banner (always visible)
+                    AIAnalysisBanner(onAnalyze: {
+                        showProjectPicker = true
+                    })
                     
                     // Projects list
                     if viewModel.projects.isEmpty {
