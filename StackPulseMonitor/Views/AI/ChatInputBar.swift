@@ -4,11 +4,35 @@ struct ChatInputBar: View {
     @Binding var text: String
     let onSend: () -> Void
     let isStreaming: Bool
+    let onMicTap: () -> Void
+    let isRecording: Bool
     
     @FocusState private var isFocused: Bool
     
     var body: some View {
         HStack(spacing: 12) {
+            // Mic button
+            Button(action: onMicTap) {
+                ZStack {
+                    Circle()
+                        .fill(isRecording ? Color.red : Theme.border)
+                        .frame(width: 36, height: 36)
+                    
+                    if isRecording {
+                        // Recording indicator
+                        Image(systemName: "waveform")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                    } else {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
+            }
+            .disabled(isStreaming)
+            .buttonStyle(.plain)
+            
             // Text input
             TextField("Ask anything...", text: $text, axis: .vertical)
                 .font(.body)

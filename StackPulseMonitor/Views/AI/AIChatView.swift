@@ -11,6 +11,8 @@ struct AIChatView: View {
     @State private var isStreaming = false
     @State private var scrollProxy: ScrollViewProxy?
     @State private var streamingMessageIndex: Int?
+    @State private var isRecording = false
+    @StateObject private var speechRecognizer = SpeechRecognizer.shared
     
     init(project: Project, viewModel: AppViewModel) {
         self.project = project
@@ -76,7 +78,9 @@ struct AIChatView: View {
                 ChatInputBar(
                     text: $inputText,
                     onSend: sendMessage,
-                    isStreaming: isStreaming
+                    isStreaming: isStreaming,
+                    onMicTap: toggleVoiceRecording,
+                    isRecording: isRecording
                 )
             }
             .background(Theme.background.ignoresSafeArea())
