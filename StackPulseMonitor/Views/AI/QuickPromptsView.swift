@@ -1,22 +1,42 @@
 import SwiftUI
 
-/// Horizontal scrollable quick action prompts for AI chat
+/// Grid of quick action prompts for AI chat
 struct QuickPromptsView: View {
     let prompts: [QuickPrompt]
     let onSelect: (String) -> Void
     
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        VStack(spacing: 10) {
+            // Row 1
             HStack(spacing: 10) {
-                ForEach(prompts) { prompt in
-                    PromptChip(prompt: prompt) {
-                        onSelect(prompt.text)
+                if prompts.count > 0 {
+                    PromptChip(prompt: prompts[0]) {
+                        onSelect(prompts[0].text)
+                    }
+                }
+                if prompts.count > 1 {
+                    PromptChip(prompt: prompts[1]) {
+                        onSelect(prompts[1].text)
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            
+            // Row 2
+            HStack(spacing: 10) {
+                if prompts.count > 2 {
+                    PromptChip(prompt: prompts[2]) {
+                        onSelect(prompts[2].text)
+                    }
+                }
+                if prompts.count > 3 {
+                    PromptChip(prompt: prompts[3]) {
+                        onSelect(prompts[3].text)
+                    }
+                }
+            }
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
     }
 }
 
@@ -34,12 +54,12 @@ struct PromptChip: View {
                     .font(.subheadline.weight(.medium))
             }
             .foregroundStyle(.purple)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
             .background(Color.purple.opacity(0.15))
-            .clipShape(.capsule)
+            .clipShape(.rect(cornerRadius: 10))
             .overlay(
-                Capsule()
+                RoundedRectangle(cornerRadius: 10)
                     .stroke(Color.purple.opacity(0.3), lineWidth: 1)
             )
         }
@@ -63,29 +83,24 @@ struct QuickPrompt: Identifiable {
         QuickPrompt(
             icon: "🔒",
             title: "Security?",
-            text: "Are there any security vulnerabilities in my dependencies?"
+            text: "Are there any security vulnerabilities?"
         ),
         QuickPrompt(
             icon: "🔄",
             title: "Safe updates?",
-            text: "Which dependencies are safe to update without breaking changes?"
+            text: "Which are safe to update?"
         ),
         QuickPrompt(
             icon: "📈",
-            title: "Health check",
-            text: "What's the overall health of my project dependencies?"
-        ),
-        QuickPrompt(
-            icon: "❓",
-            title: "Explain",
-            text: "Explain why certain dependencies are flagged as critical"
+            title: "Health",
+            text: "What's my project health?"
         )
     ]
 }
 
 // MARK: - Preview
 
-#Preview("Quick Prompts") {
+#Preview("Quick Prompts Grid") {
     VStack {
         QuickPromptsView(prompts: QuickPrompt.defaults) { text in
             print("Selected: \(text)")
