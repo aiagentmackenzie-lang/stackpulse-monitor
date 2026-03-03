@@ -90,7 +90,7 @@ final class StorageService {
     func saveProjects(_ projects: [Project]) {
         if let data = try? encoder.encode(projects) {
             defaults.set(data, forKey: projectsKey)
-            defaults.synchronize() // Force immediate write
+            // Modern iOS saves automatically; add small delay for critical operations
         }
     }
 

@@ -171,7 +171,8 @@ struct StackSetupView: View {
             VStack {
                 Spacer()
                 Button {
-                    // If no projects but has stack items, create a project from selections
+                    // Create "My Stack" project from selections ONLY during initial setup
+                    // This won't recreate it if user deletes the project later
                     if viewModel.projects.isEmpty && !viewModel.stackItems.isEmpty {
                         let stackProject = Project(
                             name: "My Stack",
@@ -187,6 +188,9 @@ struct StackSetupView: View {
                             }
                         )
                         viewModel.addProject(stackProject)
+                        // Clear stackItems so project won't auto-recreate on relaunch
+                        viewModel.stackItems.removeAll()
+                        StorageService.shared.saveStack([])
                     }
                     viewModel.completeSetup()
                     onComplete()
@@ -334,6 +338,8 @@ struct StackSetupView: View {
         if selectedPresets.contains(preset.name) {
             selectedPresets.remove(preset.name)
             viewModel.stackItems.removeAll { $0.name == preset.name }
+            // BUG FIX: Persist the removal
+            StorageService.shared.saveStack(viewModel.stackItems)
         } else {
             selectedPresets.insert(preset.name)
             let tech = Technology(

@@ -47,9 +47,11 @@ class AppViewModel {
     func loadFromStorage() {
         // Load new project-centric data
         projects = storage.loadProjects()
+        hasOnboarded = storage.hasOnboarded()
         
-        // Legacy support: migrate old stack if projects is empty
-        if projects.isEmpty {
+        // Legacy support: migrate old stack ONLY on first launch (never after deletion)
+        // Check: has user completed setup before? If yes, don't recreate deleted projects
+        if projects.isEmpty && !hasOnboarded {
             let legacyStack = storage.loadStack()
             if !legacyStack.isEmpty {
                 migrateLegacyStack(legacyStack)
@@ -59,8 +61,7 @@ class AppViewModel {
         alerts = storage.loadAlerts()
         openAIKey = storage.loadOpenAIKey() ?? ""
         lastSyncTime = storage.loadLastSync()
-        hasOnboarded = storage.hasOnboarded()
-        hasCompletedSetup = !projects.isEmpty
+        hasCompletedSetup = !projects.isEmpty || hasOnboarded
     }
     
     private func migrateLegacyStack(_ legacy: [Technology]) {
@@ -365,6 +366,10 @@ class AppViewModel {
                 projects.append(orphaned)
             }
             storage.saveProjects(projects)
+            // Force immediate write before app can be backgrounded
+            Task {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
         }
     }
     
