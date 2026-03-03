@@ -47,6 +47,13 @@ struct AlertsView: View {
             .background(Theme.background)
             .navigationTitle("Alerts")
             .toolbarBackground(Theme.background, for: .navigationBar)
+            .onAppear {
+                // Mark all active alerts as read when viewing
+                viewModel.markAllAlertsAsRead()
+                
+                // Clear notification badge
+                viewModel.clearNotificationBadge()
+            }
             .sheet(item: $selectedTech) { tech in
                 TechnologyDetailView(viewModel: viewModel, technology: tech)
             }

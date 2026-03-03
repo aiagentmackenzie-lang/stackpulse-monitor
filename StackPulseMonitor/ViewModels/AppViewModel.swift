@@ -139,12 +139,54 @@ class AppViewModel {
         if let index = alerts.firstIndex(where: { $0.id == alert.id }) {
             alerts[index].isDismissed = true
             storage.saveAlerts(alerts)
+            // Cancel notification for dismissed alert
+            alertManager.cancelNotification(for: alert.id)
         }
     }
 
     func snoozeAlert(_ alert: TechAlert, days: Int) {
         if let index = alerts.firstIndex(where: { $0.id == alert.id }) {
             alerts[index].snoozedUntil = Calendar.current.date(byAdding: .day, value: days, to: Date())
+            storage.saveAlerts(alerts)
+            // Cancel notification for snoozed alert
+            alertManager.cancelNotification(for: alert.id)
+        }
+    }
+
+    // MARK: - Alert Reading
+
+    /// Mark a specific alert as read and cancel its notification
+    func markAlertAsRead(_ alertId: UUID) {
+        guard let index = alerts.firstIndex(where: { $0.id == alertId }) else {
+            return
+        }
+        
+        // Update alert
+        alerts[index].isRead = true
+        alerts[index].readAt = Date()
+        storage.saveAlerts(alerts)
+        
+        // Cancel delivered notification
+        alertManager.cancelNotification(for: alertId)
+    }
+
+    /// Mark all active alerts as read and clear notifications
+    func markAllAlertsAsRead() {
+        // Get active (non-dismissed, non-snoozed) alerts
+        let active = alerts.filter { !$0.isDismissed && ($0.snoozedUntil == nil || $0.snoozedUntil! < Date()) }
+        
+        // Mark as read
+        for alert in active {
+            if let index = alerts.firstIndex(where: { $0.id == alert.id }) {
+                alerts[index].isRead = true
+                alerts[index].readAt = Date()
+            }
+            // Cancel notification
+            alertManager.cancelNotification(for: alert.id)
+        }
+        
+        // Save if any changed
+        if !active.isEmpty {
             storage.saveAlerts(alerts)
         }
     }
