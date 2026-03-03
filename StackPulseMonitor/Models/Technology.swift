@@ -14,6 +14,17 @@ struct Project: Identifiable, Codable, Equatable {
     var aiReports: [ProjectAIReport] = []  // Persisted AI analyses
     var aiThreads: [AIThread] = []         // NEW: Chat threads per project
     
+    // MARK: - GitHub Enrichment Data (new)
+    var description: String?             // Repo description
+    var readmeContent: String?             // First 2000 chars of README
+    var topics: [String]?                // Repo topics (e.g., ["nodejs", "api"])
+    var languageStats: [String: Int]?    // {"JavaScript": 85, "TypeScript": 15}
+    var starsCount: Int?                 // GitHub stars
+    var forksCount: Int?                 // GitHub forks
+    var license: String?                   // MIT, Apache, etc.
+    var lastCommitDate: Date?            // Last commit timestamp
+    var defaultBranch: String?           // main, master, etc.
+    
     init(
         id: UUID = UUID(),
         name: String,
@@ -23,7 +34,17 @@ struct Project: Identifiable, Codable, Equatable {
         isExpanded: Bool = true,
         dependencies: [Dependency] = [],
         aiReports: [ProjectAIReport] = [],
-        aiThreads: [AIThread] = []
+        aiThreads: [AIThread] = [],
+        // GitHub enrichment (new)
+        description: String? = nil,
+        readmeContent: String? = nil,
+        topics: [String]? = nil,
+        languageStats: [String: Int]? = nil,
+        starsCount: Int? = nil,
+        forksCount: Int? = nil,
+        license: String? = nil,
+        lastCommitDate: Date? = nil,
+        defaultBranch: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -34,6 +55,16 @@ struct Project: Identifiable, Codable, Equatable {
         self.dependencies = dependencies
         self.aiReports = aiReports
         self.aiThreads = aiThreads
+        // GitHub enrichment (new)
+        self.description = description
+        self.readmeContent = readmeContent
+        self.topics = topics
+        self.languageStats = languageStats
+        self.starsCount = starsCount
+        self.forksCount = forksCount
+        self.license = license
+        self.lastCommitDate = lastCommitDate
+        self.defaultBranch = defaultBranch
     }
     
     var dependencyCount: Int { dependencies.count }

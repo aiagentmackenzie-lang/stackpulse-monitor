@@ -119,6 +119,30 @@ struct ProjectListView: View {
                 githubFullName: repo.fullName
             )
             
+            // Fetch GitHub enrichment data
+            do {
+                let metadata = try await GitHubAuthService.shared.fetchRepoMetadata(
+                    repo: repo,
+                    token: token
+                )
+                
+                // Enrich project with GitHub data
+                project.description = metadata.description
+                project.readmeContent = metadata.readmeContent
+                project.topics = metadata.topics
+                project.starsCount = metadata.starsCount
+                project.forksCount = metadata.forksCount
+                project.license = metadata.license
+                project.lastCommitDate = metadata.lastCommitDate
+                project.defaultBranch = metadata.defaultBranch
+                project.languageStats = metadata.languageStats
+                
+                print("✅ Enriched \(repo.name): \(metadata.starsCount ?? 0) stars, \(metadata.topics?.count ?? 0) topics")
+            } catch {
+                print("⚠️ Failed to fetch metadata for \(repo.name): \(error)")
+                // Continue without enrichment - project still created
+            }
+            
             do {
                 let files = try await GitHubAuthService.shared.detectDependencyFiles(
                     in: repo,

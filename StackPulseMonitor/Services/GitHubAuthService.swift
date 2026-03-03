@@ -807,6 +807,109 @@ final class GitHubAuthService: NSObject, ObservableObject {
     }
 }
 
+// MARK: - Repository Metadata Enrichment
+
+extension GitHubAuthService {
+    /// Fetches comprehensive metadata for a repository
+    func fetchRepoMetadata(repo: GitHubRepository, token: String? = nil) async throws -> RepoMetadata {
+        let accessToken = token ?? getAccessTokenFromKeychain() ?? ""
+        
+        guard !accessToken.isEmpty else {
+            throw GitHubAuthError.notAuthenticated
+        }
+        
+        // Fetch repo details
+        let repoDetails = try await fetchRepoDetails(repo: repo, token: accessToken)
+        
+        // Fetch README (first 2000 chars)
+        let readme = try? await fetchRepoReadme(repo: repo, token: accessToken)
+        
+        // Fetch language stats
+        let languages = try? await fetchRepoLanguages(repo: repo, token: accessToken)
+        
+        return RepoMetadata(
+            description: repoDetails.description,
+            readmeContent: readme?.truncated(to: 2000),
+            topics: repoDetails.topics,
+            starsCount: repoDetails.stars,
+            forksCount: repoDetails.forks,
+            license: repoDetails.license?.name,
+            lastCommitDate: repoDetails.pushedAt,
+            defaultBranch: repoDetails.defaultBranch,
+            languageStats: languages
+        )
+    }
+    
+    /// Fetches core repository details
+    private func fetchRepoDetails(repo: GitHubRepository, token: String) async throws -> GitHubRepoDetails {
+        let url = URL(string: "https://api.github.com/repos/\(repo.fullName)")!
+        
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw GitHubAuthError.apiError("Failed to fetch repo details")
+        }
+        
+        return try JSONDecoder().decode(GitHubRepoDetails.self, from: data)
+    }
+    
+    /// Fetches README content
+    private func fetchRepoReadme(repo: GitHubRepository, token: String) async throws -> String {
+        let url = URL(string: "https://api.github.com/repos/\(repo.fullName)/readme")!
+        
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GitHubAuthError.apiError("Invalid response")
+        }
+        
+        if httpResponse.statusCode == 404 {
+            return "No README found"
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            throw GitHubAuthError.apiError("Failed to fetch README")
+        }
+        
+        let readmeResponse = try JSONDecoder().decode(GitHubReadmeResponse.self, from: data)
+        let cleanBase64 = readmeResponse.content.replacingOccurrences(of: "\n", with: "")
+        
+        guard let decodedData = Data(base64Encoded: cleanBase64),
+              let decodedString = String(data: decodedData, encoding: .utf8) else {
+            return "Unable to decode README"
+        }
+        
+        return decodedString
+    }
+    
+    /// Fetches language statistics
+    private func fetchRepoLanguages(repo: GitHubRepository, token: String) async throws -> [String: Int] {
+        let url = URL(string: "https://api.github.com/repos/\(repo.fullName)/languages")!
+        
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw GitHubAuthError.apiError("Failed to fetch languages")
+        }
+        
+        return try JSONDecoder().decode([String: Int].self, from: data)
+    }
+}
+
 // MARK: - ASWebAuthenticationPresentationContextProviding
 
 extension GitHubAuthService: ASWebAuthenticationPresentationContextProviding {
@@ -975,4 +1078,59 @@ struct GitHubPullRequest: Codable {
     let title: String
     let htmlUrl: String
     let state: String
+}
+
+// MARK: - Repository Metadata Types
+
+/// Repository metadata for AI enrichment
+struct RepoMetadata: Codable {
+    let description: String?
+    let readmeContent: String?
+    let topics: [String]?
+    let starsCount: Int?
+    let forksCount: Int?
+    let license: String?
+    let lastCommitDate: Date?
+    let defaultBranch: String?
+    let languageStats: [String: Int]?
+}
+
+/// GitHub API response for repo details
+struct GitHubRepoDetails: Codable {
+    let description: String?
+    let topics: [String]?
+    let stargazersCount: Int
+    let forksCount: Int
+    let pushedAt: Date?
+    let defaultBranch: String?
+    let license: LicenseInfo?
+    
+    var stars: Int { stargazersCount }
+    var forks: Int { forksCount }
+    
+    enum CodingKeys: String, CodingKey {
+        case description
+        case topics
+        case stargazersCount = "stargazers_count"
+        case forksCount = "forks_count"
+        case pushedAt = "pushed_at"
+        case defaultBranch = "default_branch"
+        case license
+    }
+}
+
+struct LicenseInfo: Codable {
+    let name: String
+    let spdxId: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case name
+        case spdxId = "spdx_id"
+    }
+}
+
+/// GitHub API response for README
+struct GitHubReadmeResponse: Codable {
+    let content: String
+    let encoding: String
 }

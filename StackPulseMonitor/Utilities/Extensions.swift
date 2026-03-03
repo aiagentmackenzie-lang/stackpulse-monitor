@@ -81,3 +81,13 @@ extension Date {
         return formatter.localizedString(for: self, relativeTo: Date())
     }
 }
+
+extension String {
+    /// Truncates string to limit, adding ellipsis if truncated
+    func truncated(to length: Int) -> String {
+        if self.count > length {
+            return String(self.prefix(length)) + "…"
+        }
+        return self
+    }
+}
