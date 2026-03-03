@@ -126,6 +126,10 @@ class AppViewModel {
         storage.saveStack(stackItems)
     }
 
+    func saveStack() {
+        storage.saveStack(stackItems)
+    }
+
     func removeTechnology(_ tech: Technology) {
         stackItems.removeAll { $0.id == tech.id }
         alerts.removeAll { $0.techId == tech.id }
@@ -154,6 +158,16 @@ class AppViewModel {
             alerts[index].snoozedUntil = Calendar.current.date(byAdding: .day, value: days, to: Date())
             storage.saveAlerts(alerts)
             // Cancel notification for snoozed alert
+            alertManager.cancelNotification(for: alert.id)
+        }
+    }
+
+    /// Permanently delete an alert from the array
+    func deleteAlert(_ alert: TechAlert) {
+        if let index = alerts.firstIndex(where: { $0.id == alert.id }) {
+            alerts.remove(at: index)
+            storage.saveAlerts(alerts)
+            // Cancel notification for deleted alert
             alertManager.cancelNotification(for: alert.id)
         }
     }
@@ -496,16 +510,21 @@ class AppViewModel {
     
     /// Check versions for all dependencies in a project
     func checkVersions(forProjectId projectId: UUID) async {
+        print("🔍 checkVersions START for project: \(projectId)")
         let service = VersionCheckService.shared
         
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectId }) else {
+            print("❌ Project not found: \(projectId)")
             return
         }
         
         let deps = projects[projectIndex].dependencies
+        print("📋 Found \(deps.count) dependencies to check")
         
         for dep in deps {
+            print("⏳ Checking \(dep.name) (type: \(dep.type.rawValue), current: \(dep.currentVersion))")
             if let latest = await service.checkVersion(dep) {
+                print("✅ Got version for \(dep.name): \(latest)")
                 let isOutdated = !dep.currentVersion.isEmpty && dep.currentVersion != latest
                 
                 await MainActor.run {
@@ -516,9 +535,12 @@ class AppViewModel {
                         isOutdated: isOutdated
                     )
                 }
+            } else {
+                print("⚠️ No version returned for \(dep.name)")
             }
         }
         
+        print("🔍 checkVersions END")
         // Generate alerts after checking versions
         await checkProjectForAlerts(projectId: projectId)
     }

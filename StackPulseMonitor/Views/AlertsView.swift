@@ -185,12 +185,20 @@ struct AlertsView: View {
             .shadow(color: alert.type.color.opacity(0.08), radius: 6, y: 3)
         }
         .buttonStyle(.plain)
-        .swipeActions(edge: .trailing) {
+        .swipeActions(edge: .leading) {
             Button(role: .destructive) {
+                viewModel.deleteAlert(alert)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .swipeActions(edge: .trailing) {
+            Button {
                 viewModel.dismissAlert(alert)
             } label: {
                 Label("Dismiss", systemImage: "xmark")
             }
+            .tint(.orange)
         }
         .contextMenu {
             Button {
