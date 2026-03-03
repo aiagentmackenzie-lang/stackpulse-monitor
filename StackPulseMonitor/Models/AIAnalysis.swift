@@ -140,6 +140,9 @@ enum Complexity: String, Codable {
 struct AIProjectAnalysisRequest: Codable {
     let projectName: String
     let dependencies: [AIDependencyContext]
+    let outdatedCount: Int
+    let upToDateCount: Int
+    let uncheckedCount: Int
     let cveData: [String: [String]]          // dep name -> CVE IDs
     let currentStack: String                  // summary of current versions
 }

@@ -702,18 +702,27 @@ class AppViewModel {
             return nil
         }
         
-        // Get outdated dependencies with known latest versions
-        let outdatedDeps = project.dependencies.filter { dep in
+        // Get ALL dependencies, not just outdated ones
+        let allDeps = project.dependencies
+        
+        guard !allDeps.isEmpty else {
+            throw AIError.noDependenciesToAnalyze
+        }
+        
+        // Separate outdated from up-to-date
+        let outdatedDeps = allDeps.filter { dep in
             dep.isOutdated && dep.latestVersion != nil
         }
-        
-        guard !outdatedDeps.isEmpty else {
-            return nil // No outdated deps to analyze
+        let upToDateDeps = allDeps.filter { dep in
+            !dep.isOutdated && dep.latestVersion != nil
+        }
+        let uncheckedDeps = allDeps.filter { dep in
+            dep.latestVersion == nil
         }
         
-        // Get CVE data for each dependency
+        // Get CVE data for each dependency (both outdated and up-to-date)
         var cveData: [String: [String]] = [:]
-        for dep in outdatedDeps {
+        for dep in allDeps {
             do {
                 let vulns = try await network.fetchOSVVulnerabilities(
                     packageName: dep.name,
@@ -725,23 +734,26 @@ class AppViewModel {
             }
         }
         
-        // Build dependency context
-        let depContexts: [AIDependencyContext] = outdatedDeps.map { dep in
+        // Build dependency context for ALL deps
+        let depContexts: [AIDependencyContext] = allDeps.map { dep in
             AIDependencyContext(
                 name: dep.name,
                 currentVersion: dep.currentVersion,
                 latestVersion: dep.latestVersion ?? dep.currentVersion,
                 type: dep.type.rawValue,
                 category: dep.category.rawValue,
-                changelogSnippet: nil, // Could fetch from GitHub releases
+                changelogSnippet: nil,
                 cveCount: cveData[dep.name]?.count ?? 0
             )
         }
         
-        // Build request
+        // Build request with full context
         let request = AIProjectAnalysisRequest(
             projectName: project.name,
             dependencies: depContexts,
+            outdatedCount: outdatedDeps.count,
+            upToDateCount: upToDateDeps.count,
+            uncheckedCount: uncheckedDeps.count,
             cveData: cveData,
             currentStack: depContexts.map { "\($0.name)@\($0.currentVersion)" }.joined(separator: ", ")
         )
@@ -768,30 +780,41 @@ class AppViewModel {
         }
         
         let userPrompt = """
-        Analyze these outdated dependencies for project "\(request.projectName)":
+        Analyze dependency health for project "\(request.projectName)":
         
-        Stack: \(request.currentStack)
+        Summary: \(request.outdatedCount) outdated, \(request.upToDateCount) up-to-date, \(request.uncheckedCount) unchecked
         
         Dependencies to analyze:
         \(request.dependencies.map { dep in
-            "- \(dep.name): \(dep.currentVersion) → \(dep.latestVersion) (\(dep.category), \(dep.type), \(dep.cveCount) CVEs)"
+            let status: String
+            if dep.currentVersion == dep.latestVersion {
+                status = "✅ UP TO DATE"
+            } else if dep.cveCount > 0 {
+                status = "⚠️ OUTDATED (\(dep.cveCount) CVEs)"
+            } else {
+                status = "📦 OUTDATED"
+            }
+            return "- \(dep.name): \(dep.currentVersion) → \(dep.latestVersion) [\(status), \(dep.category), \(dep.type)]"
         }.joined(separator: "\n"))
         
-        CVEs:
-        \(request.cveData.map { "\($0.key): \($0.value.joined(separator: ", "))" }.joined(separator: "\n"))
+        Unchecked dependencies (no version data available):
+        \(request.dependencies.filter { $0.currentVersion == $0.latestVersion && $0.cveCount == 0 }.map { "- \($0.name) (\($0.type))" }.joined(separator: "\n"))
         
-        Return a JSON analysis with:
+        CVEs found:
+        \(request.cveData.filter { !$0.value.isEmpty }.map { "- \($0.key): \($0.value.joined(separator: ", "))" }.joined(separator: "\n"))
+        
+        Return valid JSON only:
         {
-          "summary": "Brief summary of update status",
-          "critical": [array of critical updates with security issues],
-          "safe": [array of safe, low-risk updates],
-          "review": [array of updates needing review],
-          "actionPlan": [prioritized list of steps],
-          "estimatedTime": "estimated time to complete",
-          "overallRiskScore": 0-100 (higher = more risky)
+          "summary": "Brief summary: health status, update needs, and unchecked items",
+          "critical": [dependencies that MUST be updated - security CVEs, major versions behind],
+          "safe": [dependencies that SHOULD be updated - minor/patch updates, no breaking changes expected],
+          "review": [dependencies that NEED REVIEW - breaking changes possible, custom code impacts],
+          "actionPlan": [prioritized steps to improve health],
+          "estimatedTime": "estimated time for all updates",
+          "overallRiskScore": 0-100 (higher = more risky to NOT update)
         }
         
-        For each dependency in critical/safe/review arrays, include:
+        For each dependency:
         {
           "dependencyName": "name",
           "riskLevel": "Critical|Important|Recommended|Optional",
@@ -799,8 +822,10 @@ class AppViewModel {
           "breakingChanges": true/false,
           "securityImpact": "CVE details or null",
           "migrationComplexity": "Simple|Moderate|Complex",
-          "recommendedAction": "Specific action to take"
+          "recommendedAction": "Specific next step"
         }
+        
+        If all dependencies are up-to-date, set overallRiskScore to 0 and actionPlan to ["All dependencies are current. No action needed."]
         """
         
         let body = OpenAIChatRequest(
@@ -875,5 +900,6 @@ enum AIError: Error {
     case apiError(String)
     case noContent
     case decodingFailed
+    case noDependenciesToAnalyze
 }
 
