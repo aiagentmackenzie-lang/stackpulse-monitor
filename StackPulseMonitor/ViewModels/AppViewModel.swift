@@ -302,6 +302,11 @@ class AppViewModel {
         
         // Process alerts through AlertManager for notifications
         alertManager.processAlerts(newAlerts)
+        
+        // Update app badge with active alerts count (async, fire-and-forget)
+        Task {
+            try? await UNUserNotificationCenter.current().setBadgeCount(newAlerts.filter { !$0.isDismissed }.count)
+        }
 
         lastSyncTime = Date()
         storage.saveStack(stackItems)

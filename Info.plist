@@ -46,5 +46,12 @@
     <string>StackPulse needs microphone access to enable voice-to-text for AI chat.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>StackPulse needs speech recognition to transcribe your voice messages.</string>
+    <key>NSUserNotificationsUsageDescription</key>
+    <string>StackPulse sends alerts when vulnerabilities are found or updates are available for your dependencies.</string>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>fetch</string>
+        <string>processing</string>
+    </array>
 </dict>
 </plist>

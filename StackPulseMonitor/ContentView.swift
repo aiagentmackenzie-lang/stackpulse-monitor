@@ -21,7 +21,7 @@ struct ContentView: View {
                 }
 
             case .onboarding:
-                OnboardingView {
+                OnboardingView(viewModel: viewModel) {
                     viewModel.completeOnboarding()
                     withAnimation(.easeInOut(duration: 0.4)) {
                         phase = .apiKeySetup
