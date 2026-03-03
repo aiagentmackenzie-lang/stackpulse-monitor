@@ -846,15 +846,24 @@ extension GitHubAuthService {
     private func fetchRepoDetails(repo: GitHubRepository, token: String) async throws -> GitHubRepoDetails {
         let url = URL(string: "https://api.github.com/repos/\(repo.fullName)")!
         
+        print("🔍 API: GET \(url.absoluteString)")
+        
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw GitHubAuthError.apiError("Failed to fetch repo details")
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GitHubAuthError.apiError("Invalid response")
+        }
+        
+        print("📡 Response: \(httpResponse.statusCode)")
+        
+        guard httpResponse.statusCode == 200 else {
+            let body = String(data: data, encoding: .utf8) ?? "no body"
+            print("❌ API Error: \(body.prefix(200))")
+            throw GitHubAuthError.apiError("HTTP \(httpResponse.statusCode)")
         }
         
         return try JSONDecoder().decode(GitHubRepoDetails.self, from: data)

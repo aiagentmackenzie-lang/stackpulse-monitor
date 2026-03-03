@@ -82,6 +82,10 @@ struct AIContextBuilder {
     
     // MARK: - GitHub Context
     
+    /// Builds context from GitHub enrichment data (description, README, topics, languages, stats, license).
+    /// Called by buildSystemPrompt when project.source == .github.
+    /// Populated by ProjectListView.performImport() via GitHubAuthService.fetchRepoMetadata().
+    
     private static func buildGitHubContext(for project: Project) -> String {
         var context = "\n"
         
