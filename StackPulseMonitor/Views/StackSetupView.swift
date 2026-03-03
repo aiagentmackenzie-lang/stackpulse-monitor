@@ -194,6 +194,9 @@ struct StackSetupView: View {
             VStack {
                 Spacer()
                 Button {
+                    // Ensure all version edits are saved before creating project
+                    StorageService.shared.saveStack(viewModel.stackItems)
+                    
                     // Create "My Stack" project from selections ONLY during initial setup
                     // This won't recreate it if user deletes the project later
                     if viewModel.projects.isEmpty && !viewModel.stackItems.isEmpty {
@@ -403,10 +406,18 @@ struct StackSetupView: View {
             },
             set: { newValue in
                 if let index = selectedPresets.firstIndex(where: { $0.id == selection.id }) {
+                    // Update selectedPresets
                     selectedPresets[index].version = newValue
-                    // Update the Technology in viewModel
+                    
+                    // CRITICAL FIX: Properly update the Technology in viewModel
+                    // Since Technology is a struct, we need to replace the entire element
                     if let techIndex = viewModel.stackItems.firstIndex(where: { $0.name == selection.preset.name }) {
-                        viewModel.stackItems[techIndex].currentVersion = newValue
+                        var updatedTech = viewModel.stackItems[techIndex]
+                        updatedTech.currentVersion = newValue
+                        viewModel.stackItems[techIndex] = updatedTech
+                        
+                        // Also save to storage immediately
+                        viewModel.saveStack()
                     }
                 }
             }
