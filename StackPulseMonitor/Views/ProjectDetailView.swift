@@ -11,6 +11,7 @@ struct ProjectDetailView: View {
     @State private var aiReport: ProjectAIReport?
     @State private var isGeneratingAIReport = false
     @State private var aiError: String?
+    @State private var showAlertSettings = false
     
     // Look up project from viewModel so updates are live
     private var project: Project {
@@ -42,10 +43,23 @@ struct ProjectDetailView: View {
         .background(Theme.background)
         .navigationTitle(project.name)
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showAlertSettings = true
+                } label: {
+                    Image(systemName: "bell.badge")
+                        .foregroundStyle(Theme.accent)
+                }
+            }
+        }
         .sheet(isPresented: $showAIReport) {
             if let report = aiReport {
                 AIReportSheet(report: report, onDismiss: { showAIReport = false })
             }
+        }
+        .sheet(isPresented: $showAlertSettings) {
+            ProjectAlertSettingsView(project: project)
         }
     }
     

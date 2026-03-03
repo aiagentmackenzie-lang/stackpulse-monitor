@@ -19,6 +19,7 @@ class AppViewModel {
 
     private let storage = StorageService.shared
     private let network = NetworkService.shared
+    private let alertManager = AlertManager.shared
     
     // MARK: - Computed Properties
     var totalDependencies: Int { projects.reduce(0) { $0 + $1.dependencyCount } }
@@ -43,6 +44,11 @@ class AppViewModel {
     var updateCount: Int { stackItems.filter { $0.status == .update }.count }
     var criticalCount: Int { stackItems.filter { $0.status == .critical }.count }
     var activeAlerts: [TechAlert] { alerts.filter { !$0.isDismissed && ($0.snoozedUntil == nil || $0.snoozedUntil! < Date()) } }
+    
+    /// Alerts that haven't been read yet (for badge)
+    var unreadAlerts: [TechAlert] { 
+        activeAlerts.filter { !$0.isRead } 
+    }
 
     func loadFromStorage() {
         // Load new project-centric data
@@ -138,6 +144,8 @@ class AppViewModel {
         if let index = alerts.firstIndex(where: { $0.id == alert.id }) {
             alerts[index].isDismissed = true
             storage.saveAlerts(alerts)
+            // Cancel notification for dismissed alert
+            alertManager.cancelNotification(for: alert.id)
         }
     }
 
@@ -145,7 +153,45 @@ class AppViewModel {
         if let index = alerts.firstIndex(where: { $0.id == alert.id }) {
             alerts[index].snoozedUntil = Calendar.current.date(byAdding: .day, value: days, to: Date())
             storage.saveAlerts(alerts)
+            // Cancel notification for snoozed alert
+            alertManager.cancelNotification(for: alert.id)
         }
+    }
+
+    // MARK: - Alert Reading
+
+    /// Mark a specific alert as read and cancel its notification
+    func markAlertAsRead(_ alertId: UUID) {
+        guard let index = alerts.firstIndex(where: { $0.id == alertId }) else {
+            return
+        }
+        
+        // Update alert
+        alerts[index].isRead = true
+        alerts[index].readAt = Date()
+        storage.saveAlerts(alerts)
+        
+        // Cancel delivered notification
+        alertManager.cancelNotification(for: alertId)
+    }
+
+    /// Mark all active alerts as read and clear notifications
+    func markAllAlertsAsRead() {
+        // Mark ALL alerts as read (not just active ones)
+        for index in alerts.indices {
+            if !alerts[index].isRead {
+                alerts[index].isRead = true
+                alerts[index].readAt = Date()
+            }
+            // Cancel notification for this alert
+            alertManager.cancelNotification(for: alerts[index].id)
+        }
+        
+        // Also clear any orphaned notifications (notifications for alerts that no longer exist)
+        alertManager.cancelAllNotifications()
+        
+        // Save changes
+        storage.saveAlerts(alerts)
     }
 
     func completeSetup() {
@@ -298,6 +344,14 @@ class AppViewModel {
             }
             return a
         }
+        
+        // Process alerts through AlertManager for notifications
+        alertManager.processAlerts(newAlerts)
+        
+        // Update app badge with active alerts count (async, fire-and-forget)
+        Task {
+            try? await UNUserNotificationCenter.current().setBadgeCount(newAlerts.filter { !$0.isDismissed }.count)
+        }
 
         lastSyncTime = Date()
         storage.saveStack(stackItems)
@@ -308,6 +362,33 @@ class AppViewModel {
         isSyncing = false
     }
 
+    // MARK: - Alert Notifications
+    
+    /// Check and request notification permissions
+    func checkNotificationPermissions() async -> Bool {
+        await alertManager.checkPermissionStatus()
+        if !alertManager.hasPermission {
+            return await alertManager.requestPermission()
+        }
+        return alertManager.hasPermission
+    }
+    
+    /// Request notification permissions explicitly
+    func requestNotificationPermissions() async -> Bool {
+        return await alertManager.requestPermission()
+    }
+    
+    /// Clear notification badge
+    func clearNotificationBadge() {
+        alertManager.clearBadge()
+    }
+
+    /// Clear all notifications
+    func clearAllNotifications() {
+        alertManager.cancelAllNotifications()
+        alertManager.clearBadge()
+    }
+    
     func clearAllData() {
         stackItems = []
         alerts = []
@@ -437,6 +518,156 @@ class AppViewModel {
                 }
             }
         }
+        
+        // Generate alerts after checking versions
+        await checkProjectForAlerts(projectId: projectId)
+    }
+    
+    // MARK: - Project Alert Checking
+    
+    /// Check a project for alerts (CVEs, updates, EOL) and generate TechAlerts
+    func checkProjectForAlerts(projectId: UUID) async {
+        guard let projectIndex = projects.firstIndex(where: { $0.id == projectId }) else {
+            return
+        }
+        
+        var newAlerts: [TechAlert] = []
+        let deps = projects[projectIndex].dependencies
+        
+        for dep in deps {
+            // Skip dependencies without known versions
+            guard !dep.currentVersion.isEmpty else { continue }
+            
+            // Check for CVEs (vulnerabilities)
+            do {
+                let vulns = try await network.fetchOSVVulnerabilities(
+                    packageName: dep.name,
+                    ecosystem: dep.type.rawValue
+                )
+                
+                if !vulns.isEmpty {
+                    let severity = vulns.first?.severity?.first?.score ?? "UNKNOWN"
+                    newAlerts.append(TechAlert(
+                        techId: dep.id,
+                        techName: dep.name,
+                        type: .critical,
+                        title: "CVE Found in \(dep.name)",
+                        message: vulns.first?.summary ?? "Vulnerability detected",
+                        severity: severity
+                    ))
+                }
+            } catch {
+                // CVE check unavailable
+            }
+            
+            // Check for updates
+            if let latest = dep.latestVersion, dep.isOutdated {
+                let isMajor = isMajorUpdate(current: dep.currentVersion, latest: latest)
+                if isMajor {
+                    newAlerts.append(TechAlert(
+                        techId: dep.id,
+                        techName: dep.name,
+                        type: .update,
+                        title: "Major Update: \(dep.name)",
+                        message: "\(dep.currentVersion) → \(latest)",
+                        severity: "MEDIUM"
+                    ))
+                }
+            }
+            
+            // Check for EOL
+            let preset = PresetTech.all.first { $0.name.lowercased() == dep.name.lowercased() }
+            if let eolSlug = preset?.eolSlug {
+                do {
+                    let eolData = try await network.fetchEOL(eolSlug)
+                    if let first = eolData.first {
+                        if case .string(let dateStr) = first.eol {
+                            newAlerts.append(TechAlert(
+                                techId: dep.id,
+                                techName: dep.name,
+                                type: .eol,
+                                title: "EOL Warning: \(dep.name)",
+                                message: "End of Life: \(dateStr)",
+                                severity: "LOW"
+                            ))
+                        } else if case .bool(let isEol) = first.eol, isEol {
+                            newAlerts.append(TechAlert(
+                                techId: dep.id,
+                                techName: dep.name,
+                                type: .eol,
+                                title: "EOL Warning: \(dep.name)",
+                                message: "Already End of Life",
+                                severity: "LOW"
+                            ))
+                        }
+                    }
+                } catch {
+                    // EOL check unavailable
+                }
+            }
+        }
+        
+        // Merge new alerts, preserving dismissed state
+        let existingDismissed = Set(alerts.filter(\.isDismissed).map { "\($0.techId)-\($0.type)" })
+        let mergedAlerts = newAlerts.map { alert in
+            var a = alert
+            let key = "\(a.techId)-\(a.type)"
+            if existingDismissed.contains(key) {
+                a.isDismissed = true
+            }
+            return a
+        }
+        
+        // Add to existing alerts (replace any for same tech+type)
+        var alertMap = Dictionary(uniqueKeysWithValues: alerts.map { ("\($0.techId)-\($0.type)", $0) })
+        for alert in mergedAlerts {
+            alertMap["\(alert.techId)-\(alert.type)"] = alert
+        }
+        alerts = Array(alertMap.values)
+        
+        // Process through AlertManager for notifications
+        alertManager.processAlerts(mergedAlerts, forProject: projectId)
+        
+        // Save alerts
+        storage.saveAlerts(alerts)
+        
+        // Update badge
+        Task {
+            try? await UNUserNotificationCenter.current().setBadgeCount(activeAlerts.count)
+        }
+    }
+    
+    /// Check all projects for alerts
+    func checkAllProjectsForAlerts() async {
+        for project in projects {
+            await checkProjectForAlerts(projectId: project.id)
+        }
+    }
+    
+    // MARK: - Navigation Helpers
+    
+    /// Find the project containing a specific dependency/technology
+    func findProject(forTechId techId: UUID) -> Project? {
+        // Search in project dependencies first (new model)
+        if let project = projects.first(where: { project in
+            project.dependencies.contains { $0.id == techId }
+        }) {
+            return project
+        }
+        
+        // Legacy: check if techId matches a project's dependency name
+        // This handles alerts for dependencies that might not be in the new model yet
+        return nil
+    }
+    
+    /// Get dependency details for a given techId
+    func getDependency(forTechId techId: UUID) -> Dependency? {
+        for project in projects {
+            if let dep = project.dependencies.first(where: { $0.id == techId }) {
+                return dep
+            }
+        }
+        return nil
     }
     
     // MARK: - AI Analysis

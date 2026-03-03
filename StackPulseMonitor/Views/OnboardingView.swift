@@ -2,6 +2,8 @@ import SwiftUI
 
 struct OnboardingView: View {
     @State private var currentPage = 0
+    @State private var showNotificationsStep = false
+    let viewModel: AppViewModel
     let onComplete: () -> Void
 
     private let slides: [(icon: String, title: String, body: String)] = [
@@ -26,58 +28,78 @@ struct OnboardingView: View {
         ZStack {
             Theme.background.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                TabView(selection: $currentPage) {
-                    ForEach(Array(slides.enumerated()), id: \.offset) { index, slide in
-                        slideView(icon: slide.icon, title: slide.title, body: slide.body)
-                            .tag(index)
+            if showNotificationsStep {
+                // Notifications step
+                OnboardingNotificationsView(
+                    viewModel: viewModel,
+                    onContinue: {
+                        onComplete()
+                    },
+                    onSkip: {
+                        onComplete()
+                    }
+                )
+            } else {
+                // Main onboarding slides
+                mainOnboardingContent
+            }
+        }
+    }
+
+    private var mainOnboardingContent: some View {
+        VStack(spacing: 0) {
+            TabView(selection: $currentPage) {
+                ForEach(Array(slides.enumerated()), id: \.offset) { index, slide in
+                    slideView(icon: slide.icon, title: slide.title, body: slide.body)
+                        .tag(index)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .animation(.easeInOut(duration: 0.3), value: currentPage)
+
+            VStack(spacing: 24) {
+                HStack(spacing: 8) {
+                    ForEach(0..<3, id: \.self) { index in
+                        Capsule()
+                            .fill(index == currentPage ? Theme.accent : Theme.muted)
+                            .frame(width: index == currentPage ? 24 : 8, height: 8)
+                            .animation(.spring(duration: 0.3), value: currentPage)
                     }
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .animation(.easeInOut(duration: 0.3), value: currentPage)
 
-                VStack(spacing: 24) {
-                    HStack(spacing: 8) {
-                        ForEach(0..<3, id: \.self) { index in
-                            Capsule()
-                                .fill(index == currentPage ? Theme.accent : Theme.muted)
-                                .frame(width: index == currentPage ? 24 : 8, height: 8)
-                                .animation(.spring(duration: 0.3), value: currentPage)
+                if currentPage == 2 {
+                    Button {
+                        withAnimation {
+                            showNotificationsStep = true
                         }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text("GET STARTED")
+                                .font(.headline)
+                            Image(systemName: "arrow.right")
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Theme.accent)
+                        .clipShape(.rect(cornerRadius: 14))
                     }
-
-                    if currentPage == 2 {
-                        Button {
-                            onComplete()
-                        } label: {
-                            HStack(spacing: 8) {
-                                Text("GET STARTED")
-                                    .font(.headline)
-                                Image(systemName: "arrow.right")
-                            }
-                            .foregroundStyle(.white)
+                    .padding(.horizontal, 24)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                } else {
+                    Button {
+                        withAnimation { currentPage += 1 }
+                    } label: {
+                        Text("Next")
+                            .font(.headline)
+                            .foregroundStyle(Theme.accent)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
-                            .background(Theme.accent)
-                            .clipShape(.rect(cornerRadius: 14))
-                        }
-                        .padding(.horizontal, 24)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                    } else {
-                        Button {
-                            withAnimation { currentPage += 1 }
-                        } label: {
-                            Text("Next")
-                                .font(.headline)
-                                .foregroundStyle(Theme.accent)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                        }
-                        .padding(.horizontal, 24)
                     }
+                    .padding(.horizontal, 24)
                 }
-                .padding(.bottom, 40)
             }
+            .padding(.bottom, 40)
         }
     }
 

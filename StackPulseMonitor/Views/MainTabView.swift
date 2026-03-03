@@ -34,13 +34,20 @@ struct MainTabView: View {
             Tab("Alerts", systemImage: "bell.badge.fill", value: 3) {
                 AlertsView(viewModel: viewModel)
             }
-            .badge(viewModel.activeAlerts.count)
+            .badge(viewModel.unreadAlerts.count)
 
             Tab("Settings", systemImage: "gearshape.fill", value: 4) {
                 SettingsView(viewModel: viewModel)
             }
         }
         .tint(Theme.accent)
+        .onChange(of: selectedTab) { oldTab, newTab in
+            if newTab == 3 { // Alerts tab selected
+                // Mark all alerts as read and clear badge
+                viewModel.markAllAlertsAsRead()
+                viewModel.clearNotificationBadge()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .switchToProjectsTab)) { _ in
             selectedTab = 1  // Switch to Projects tab
         }

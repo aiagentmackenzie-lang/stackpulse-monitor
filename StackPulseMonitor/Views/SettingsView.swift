@@ -9,9 +9,6 @@ struct SettingsView: View {
     @State private var testSuccess: Bool?
     @State private var autoSync = true
     @State private var syncOnOpen = true
-    @State private var criticalAlerts = true
-    @State private var updateAlerts = true
-    @State private var eolAlerts = true
 
     var body: some View {
         NavigationStack {
@@ -82,31 +79,7 @@ struct SettingsView: View {
                         .foregroundStyle(Theme.textSecondary)
                 }
 
-                Section {
-                    Toggle(isOn: $criticalAlerts) {
-                        Label("Critical CVE Alerts", systemImage: "shield.exclamationmark.fill")
-                            .foregroundStyle(Theme.textPrimary)
-                    }
-                    .tint(Theme.accent)
-                    .listRowBackground(Theme.cardBackground)
-
-                    Toggle(isOn: $updateAlerts) {
-                        Label("Major Updates", systemImage: "arrow.up.circle.fill")
-                            .foregroundStyle(Theme.textPrimary)
-                    }
-                    .tint(Theme.accent)
-                    .listRowBackground(Theme.cardBackground)
-
-                    Toggle(isOn: $eolAlerts) {
-                        Label("EOL Warnings", systemImage: "clock.badge.exclamationmark.fill")
-                            .foregroundStyle(Theme.textPrimary)
-                    }
-                    .tint(Theme.accent)
-                    .listRowBackground(Theme.cardBackground)
-                } header: {
-                    Text("Notifications")
-                        .foregroundStyle(Theme.textSecondary)
-                }
+                AlertPreferencesSection(alertManager: AlertManager.shared)
 
                 Section {
                     Button(role: .destructive) {
