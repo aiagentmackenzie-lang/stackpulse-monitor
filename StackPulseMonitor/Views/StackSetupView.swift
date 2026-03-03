@@ -283,6 +283,29 @@ struct StackSetupView: View {
                 githubFullName: repo.fullName
             )
             
+            // Fetch GitHub enrichment data
+            print("🔍 [StackSetup] Fetching metadata for \(repo.fullName)...")
+            do {
+                let metadata = try await GitHubAuthService.shared.fetchRepoMetadata(
+                    repo: repo,
+                    token: token
+                )
+                
+                print("✅ [StackSetup] Got metadata for \(repo.name)")
+                
+                project.description = metadata.description
+                project.readmeContent = metadata.readmeContent
+                project.topics = metadata.topics
+                project.starsCount = metadata.starsCount
+                project.forksCount = metadata.forksCount
+                project.license = metadata.license
+                project.lastCommitDate = metadata.lastCommitDate
+                project.defaultBranch = metadata.defaultBranch
+                project.languageStats = metadata.languageStats
+            } catch {
+                print("❌ [StackSetup] Failed to fetch metadata: \(error)")
+            }
+            
             // Detect dependencies
             do {
                 let files = try await GitHubAuthService.shared.detectDependencyFiles(
