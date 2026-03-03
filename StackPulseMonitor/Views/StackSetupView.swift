@@ -205,7 +205,7 @@ struct StackSetupView: View {
                             source: .manual,
                             dependencies: viewModel.stackItems.map { tech in
                                 Dependency(
-                                    name: tech.name,
+                                    name: tech.identifier.isEmpty ? tech.name : tech.identifier,
                                     type: tech.type,
                                     category: tech.category,
                                     currentVersion: tech.currentVersion,
