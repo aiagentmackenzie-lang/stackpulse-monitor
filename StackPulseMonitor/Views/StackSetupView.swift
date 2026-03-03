@@ -13,6 +13,13 @@ private enum SetupImportSheetType: Identifiable {
     }
 }
 
+// Selected preset with editable version
+private struct PresetSelection: Identifiable {
+    let id = UUID()
+    let preset: PresetTech
+    var version: String
+}
+
 struct StackSetupView: View {
     let viewModel: AppViewModel
     let onComplete: () -> Void
@@ -21,7 +28,7 @@ struct StackSetupView: View {
     @StateObject private var authService = GitHubAuthService.shared
     @State private var showRepoList = false  // Deprecated, use activeSheet
 
-    @State private var selectedPresets: Set<String> = []
+    @State private var selectedPresets: [PresetSelection] = []
     @State private var customName = ""
     @State private var customVersion = ""
     @State private var customType: TechType = .npm
@@ -317,6 +324,10 @@ struct StackSetupView: View {
 
     private func categorySection(_ category: TechCategory) -> some View {
         let presets = PresetTech.forCategory(category)
+        let selectedInCategory = selectedPresets.filter { selection in
+            presets.contains { $0.name == selection.preset.name }
+        }
+        
         return VStack(alignment: .leading, spacing: 10) {
             Text(category.rawValue)
                 .font(.subheadline.weight(.semibold))
@@ -326,7 +337,7 @@ struct StackSetupView: View {
                 GridItem(.adaptive(minimum: 100), spacing: 8)
             ], spacing: 8) {
                 ForEach(presets, id: \.name) { preset in
-                    let isSelected = selectedPresets.contains(preset.name)
+                    let isSelected = selectedPresets.contains { $0.preset.name == preset.name }
                     Button {
                         togglePreset(preset)
                     } label: {
@@ -345,24 +356,79 @@ struct StackSetupView: View {
                     }
                 }
             }
+            
+            // Show version inputs for selected presets
+            if !selectedInCategory.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Version")
+                        .font(.caption)
+                        .foregroundStyle(Theme.textSecondary)
+                    
+                    ForEach(selectedInCategory) { selection in
+                        HStack {
+                            Text(selection.preset.name)
+                                .font(.caption)
+                                .foregroundStyle(Theme.textPrimary)
+                                .frame(width: 80, alignment: .leading)
+                            
+                            TextField("Version (e.g., \(selection.preset.defaultVersion))", text: binding(for: selection))
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .font(.body)
+                                .foregroundStyle(Theme.textPrimary)
+                                .padding(8)
+                                .background(Theme.cardBackground)
+                                .clipShape(.rect(cornerRadius: 6))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(Theme.border, lineWidth: 1)
+                                )
+                        }
+                    }
+                }
+                .padding(.top, 8)
+            }
         }
         .padding(16)
         .cardStyle()
     }
+    
+    private func binding(for selection: PresetSelection) -> Binding<String> {
+        Binding(
+            get: {
+                if let index = selectedPresets.firstIndex(where: { $0.id == selection.id }) {
+                    return selectedPresets[index].version
+                }
+                return selection.version
+            },
+            set: { newValue in
+                if let index = selectedPresets.firstIndex(where: { $0.id == selection.id }) {
+                    selectedPresets[index].version = newValue
+                    // Update the Technology in viewModel
+                    if let techIndex = viewModel.stackItems.firstIndex(where: { $0.name == selection.preset.name }) {
+                        viewModel.stackItems[techIndex].currentVersion = newValue
+                    }
+                }
+            }
+        )
+    }
 
     private func togglePreset(_ preset: PresetTech) {
-        if selectedPresets.contains(preset.name) {
-            selectedPresets.remove(preset.name)
+        if let index = selectedPresets.firstIndex(where: { $0.preset.name == preset.name }) {
+            // Deselect: remove from selected and from viewModel
+            selectedPresets.remove(at: index)
             viewModel.stackItems.removeAll { $0.name == preset.name }
-            // BUG FIX: Persist the removal
             StorageService.shared.saveStack(viewModel.stackItems)
         } else {
-            selectedPresets.insert(preset.name)
+            // Select: add with default version
+            let selection = PresetSelection(preset: preset, version: preset.defaultVersion)
+            selectedPresets.append(selection)
             let tech = Technology(
                 name: preset.name,
                 type: preset.type,
                 identifier: preset.identifier,
-                category: preset.category
+                category: preset.category,
+                currentVersion: preset.defaultVersion
             )
             viewModel.addTechnology(tech)
         }
