@@ -147,8 +147,14 @@ struct AIChatView: View {
             let messageIndex = thread.messages.count - 1
             
             // Build system prompt with project context
+            print("🔍 [AIChat] Building context for: \(project.name), source: \(project.source)")
+            print("🔍 [AIChat] Has description: \(project.description != nil), readme: \(project.readmeContent != nil)")
+            print("🔍 [AIChat] Topics: \(project.topics ?? []), Stars: \(project.starsCount ?? 0)")
+            
             let systemPrompt = AIContextBuilder.buildSystemPrompt(for: project)
             let extraContext = AIContextBuilder.buildMessageContext(project: project, userMessage: messageText)
+            
+            print("🔍 [AIChat] Prompt: \(systemPrompt.prefix(300))...")
             
             let fullSystem = extraContext.isEmpty ? systemPrompt : "\(systemPrompt)\n\nCurrent context:\n\(extraContext)"
             

@@ -6,6 +6,8 @@ struct AIContextBuilder {
     // MARK: - System Prompt
     
     static func buildSystemPrompt(for project: Project) -> String {
+        print("🔍 [AIContextBuilder] Building prompt for: \(project.name)")
+        
         var context = """
         You are an AI assistant for StackPulse Monitor, helping with dependency analysis and management.
         
@@ -17,7 +19,16 @@ struct AIContextBuilder {
         
         // Add GitHub enrichment context if available
         if project.source == .github {
-            context += buildGitHubContext(for: project)
+            print("🔍 [AIContextBuilder] Project is from GitHub, checking enrichment...")
+            print("🔍 [AIContextBuilder] description: \(project.description ?? "nil")")
+            print("🔍 [AIContextBuilder] topics: \(project.topics ?? [])")
+            print("🔍 [AIContextBuilder] stars: \(project.starsCount ?? 0)")
+            
+            let githubContext = buildGitHubContext(for: project)
+            print("🔍 [AIContextBuilder] GitHub context length: \(githubContext.count)")
+            context += githubContext
+        } else {
+            print("🔍 [AIContextBuilder] Project source is: \(project.source), skipping GitHub context")
         }
         
         // Add dependency breakdown
