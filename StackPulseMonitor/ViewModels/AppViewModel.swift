@@ -19,6 +19,7 @@ class AppViewModel {
 
     private let storage = StorageService.shared
     private let network = NetworkService.shared
+    private let alertManager = AlertManager.shared
     
     // MARK: - Computed Properties
     var totalDependencies: Int { projects.reduce(0) { $0 + $1.dependencyCount } }
@@ -298,6 +299,9 @@ class AppViewModel {
             }
             return a
         }
+        
+        // Process alerts through AlertManager for notifications
+        alertManager.processAlerts(newAlerts)
 
         lastSyncTime = Date()
         storage.saveStack(stackItems)
@@ -308,6 +312,27 @@ class AppViewModel {
         isSyncing = false
     }
 
+    // MARK: - Alert Notifications
+    
+    /// Check and request notification permissions
+    func checkNotificationPermissions() async -> Bool {
+        await alertManager.checkPermissionStatus()
+        if !alertManager.hasPermission {
+            return await alertManager.requestPermission()
+        }
+        return alertManager.hasPermission
+    }
+    
+    /// Request notification permissions explicitly
+    func requestNotificationPermissions() async -> Bool {
+        return await alertManager.requestPermission()
+    }
+    
+    /// Clear notification badge
+    func clearNotificationBadge() {
+        alertManager.clearBadge()
+    }
+    
     func clearAllData() {
         stackItems = []
         alerts = []

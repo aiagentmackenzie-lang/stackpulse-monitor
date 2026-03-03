@@ -15,6 +15,7 @@ final class StorageService {
     private let settingsKey = "sp_settings"
     private let lastSyncKey = "sp_last_sync"
     private let hasOnboardedKey = "sp_has_onboarded"
+    private let alertPrefsKey = "sp_alert_prefs"
 
     private init() {}
 
@@ -100,5 +101,21 @@ final class StorageService {
             return []
         }
         return projects
+    }
+    
+    // MARK: - Alert Preferences Storage
+    
+    func saveAlertPrefs(_ prefs: UserAlertPrefs) {
+        if let data = try? encoder.encode(prefs) {
+            defaults.set(data, forKey: alertPrefsKey)
+        }
+    }
+    
+    func loadAlertPrefs() -> UserAlertPrefs? {
+        guard let data = defaults.data(forKey: alertPrefsKey),
+              let prefs = try? decoder.decode(UserAlertPrefs.self, from: data) else {
+            return nil
+        }
+        return prefs
     }
 }
