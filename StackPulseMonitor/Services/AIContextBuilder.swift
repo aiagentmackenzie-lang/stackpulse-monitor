@@ -15,6 +15,11 @@ struct AIContextBuilder {
         
         """
         
+        // Add GitHub enrichment context if available
+        if project.source == .github {
+            context += buildGitHubContext(for: project)
+        }
+        
         // Add dependency breakdown
         if !project.dependencies.isEmpty {
             context += "\nDependencies:\n"
@@ -71,6 +76,66 @@ struct AIContextBuilder {
         
         Be concise, helpful, and specific to this project's dependencies.
         """
+        
+        return context
+    }
+    
+    // MARK: - GitHub Context
+    
+    private static func buildGitHubContext(for project: Project) -> String {
+        var context = "\n"
+        
+        // Repository description
+        if let description = project.description, !description.isEmpty {
+            context += "Project Description: \(description)\n"
+        }
+        
+        // Repository stats
+        if let stars = project.starsCount {
+            context += "GitHub Stars: \(stars)"
+            if let forks = project.forksCount {
+                context += " | Forks: \(forks)"
+            }
+            context += "\n"
+        }
+        
+        // Topics
+        if let topics = project.topics, !topics.isEmpty {
+            context += "Topics: \(topics.joined(separator: ", "))\n"
+        }
+        
+        // Language breakdown
+        if let languages = project.languageStats, !languages.isEmpty {
+            let total = Double(languages.values.reduce(0, +))
+            let sorted = languages.sorted { $0.value > $1.value }.prefix(5)
+            context += "Languages: "
+            context += sorted.map { lang, bytes in
+                let percent = Int(Double(bytes) / total * 100)
+                return "\(lang) (\(percent)%)"
+            }.joined(separator: ", ")
+            context += "\n"
+        }
+        
+        // License
+        if let license = project.license, !license.isEmpty {
+            context += "License: \(license)\n"
+        }
+        
+        // Last activity
+        if let lastCommit = project.lastCommitDate {
+            let timeAgo = formatDate(lastCommit)
+            context += "Last Activity: \(timeAgo)\n"
+        }
+        
+        // README excerpt (first 500 chars)
+        if let readme = project.readmeContent, !readme.isEmpty {
+            let excerpt = String(readme.prefix(500))
+            context += "\nREADME Preview:\n\(excerpt)"
+            if readme.count > 500 {
+                context += "..."
+            }
+            context += "\n"
+        }
         
         return context
     }
