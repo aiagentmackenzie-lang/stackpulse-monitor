@@ -1,8 +1,8 @@
 # StackPulse Monitor 📊🔍
 
-Your personal tech stack health monitor. Track dependencies, detect vulnerabilities, and stay ahead of end-of-life dates with AI-powered insights.
+Your personal tech stack health monitor with AI-powered insights. Track dependencies, detect vulnerabilities, and get intelligent analysis through natural conversation.
 
-![Swift](https://img.shields.io/badge/Swift-5.9+-orange.svg)
+![Swift](https://img.shields.io/badge/Swift-6.0+-orange.svg)
 ![iOS](https://img.shields.io/badge/iOS-17.0+-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-iOS-lightgrey.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
@@ -11,11 +11,31 @@ Your personal tech stack health monitor. Track dependencies, detect vulnerabilit
 
 ## ✨ Features
 
-### 📦 Multi-Package Registry Support
-- **NPM Registry** - Direct package lookup and version checking
-- **GitHub Releases** - Track releases from GitHub repos
-- **Platform Monitoring** - Node.js, Python, Go, PostgreSQL, and more
-- **Language Support** - EOL tracking for major languages
+### 🤖 AI-Powered Chat Assistant
+- **Natural Language Queries** - Ask about your stack in plain English
+- **Voice-to-Text** - Tap the mic, speak your questions
+- **Persistent Threads** - Continue conversations across sessions
+- **Quick Prompts** - "What's my health score?" "Show critical updates" etc.
+- **Streaming Responses** - Real-time AI-generated answers
+- **Per-Project Context** - AI knows your dependencies
+
+### 📦 Multi-Project Support
+- **GitHub Integration** - Import repos with automatic dependency detection
+- **Manual Projects** - Track custom stacks and legacy imports
+- **Project Health Scores** - Individual 0-100 scores per project
+- **Cross-Project Insights** - AI analyzes across all your codebases
+
+### 📊 Health Dashboard
+- **Stack Health Score** - 0-100 aggregate score across all projects
+- **Status Breakdown**:
+  | Status | Icon | Meaning |
+  |--------|------|---------|
+  | ✅ OK | checkmark.circle | Current and secure |
+  | ⚠️ Update | arrow.up.circle | Update available |
+  | 🔴 Critical | exclamationmark.shield | CVEs found |
+  | ⏰ EOL | clock | End of life approaching |
+- **Dependency Summary** - Total, outdated, unknown counts
+- **Last Checked** - Time since last sync
 
 ### 🔒 Vulnerability Detection
 - **OSV Database** - Open Source Vulnerabilities database integration
@@ -29,21 +49,11 @@ Your personal tech stack health monitor. Track dependencies, detect vulnerabilit
 - **Version Support** - Current, LTS, Extended support tracking
 - **Breaking Changes** - Flag for major version updates
 
-### 🤖 AI-Powered Insights
-- **GPT-4o Analysis** - Summarize what's changed between versions
+### 🤖 AI-Powered Analysis
+- **Dependency Analysis** - AI reads changelogs and release notes
 - **Urgency Scoring** - AI determines upgrade priority
 - **Breaking Change Detection** - AI flags potential issues
 - **Score Impact** - -10 to 0 health score impact prediction
-
-### 📊 Health Dashboard
-- **Stack Health Score** - 0-100 aggregate score
-- **Status Breakdown**:
-  | Status | Icon | Meaning |
-  |--------|------|---------|
-  | ✅ OK | checkmark.circle | Current and secure |
-  | ⚠️ Update | arrow.up.circle | Update available |
-  | 🔴 Critical | exclamationmark.shield | CVEs found |
-  | ⏰ EOL | clock | End of life approaching |
 
 ### 🚨 Smart Alerts
 - **Critical Vulnerabilities** - Immediate notifications
@@ -59,29 +69,39 @@ Your personal tech stack health monitor. Track dependencies, detect vulnerabilit
 ```
 StackPulseMonitor/
 ├── StackPulseMonitorApp.swift          # App entry point
-├── ContentView.swift                    # Navigation flow
+├── ContentView.swift                    # Navigation flow (Onboarding → Main)
 ├── Config.swift                         # Environment settings
 ├── Models/
-│   ├── Technology.swift                 # Tech stack item model
+│   ├── Project.swift                    # Project-centric data model
+│   ├── Dependency.swift                 # Dependency within projects
+│   ├── AIThread.swift                   # Chat thread persistence
+│   ├── AIMessage.swift                  # Chat message model
+│   ├── Technology.swift                 # Legacy stack item (migration support)
 │   ├── TechAlert.swift                  # Alert/notification model
-│   ├── PresetTech.swift                 # Pre-configured tech list
 │   └── APIResponses.swift               # Network response models
 ├── Services/
 │   ├── NetworkService.swift             # NPM, GitHub, OSV APIs
-│   └── StorageService.swift             # Local persistence
+│   ├── GitHubAuthService.swift          # GitHub OAuth flow
+│   ├── SpeechRecognizer.swift          # Voice-to-text
+│   └── StorageService.swift             # Local persistence (UserDefaults/Keychain)
 ├── ViewModels/
 │   └── AppViewModel.swift               # App state management
 ├── Views/
 │   ├── SplashView.swift                 # Launch screen
-│   ├── OnboardingView.swift            # First-time walkthrough
-│   ├── APIKeySetupView.swift           # OpenAI key entry
-│   ├── StackSetupView.swift            # Initial stack setup
-│   ├── MainTabView.swift               # Tab container
-│   ├── StackView.swift                 # Manage tech stack
-│   ├── PulseView.swift                 # Health dashboard
+│   ├── OnboardingView.swift             # First-time walkthrough
+│   ├── APIKeySetupView.swift            # OpenAI key entry
+│   ├── StackSetupView.swift             # Initial project/stack setup
+│   ├── ProjectListView.swift            # Manage projects
+│   ├── ProjectDetailView.swift          # Project-specific dependency view
+│   ├── AI/
+│   │   ├── AIThreadListView.swift        # All chat threads overview
+│   │   ├── AIChatView.swift             # Individual chat thread
+│   │   ├── ChatInputBar.swift           # Message input + voice button
+│   │   └── AIReportSheet.swift          # AI analysis reports
+│   ├── MainTabView.swift                # Tab container (Pulse, Projects, AI, Alerts, Settings)
+│   ├── PulseView.swift                  # Health dashboard (empty state shows "Add Project")
 │   ├── AlertsView.swift                 # Alert center
-│   ├── SettingsView.swift               # App settings
-│   └── TechnologyDetailView.swift       # Tech details + AI summary
+│   └── SettingsView.swift               # App settings
 └── Utilities/
     ├── Theme.swift                      # App styling
     └── Extensions.swift                 # Helper extensions
@@ -95,7 +115,8 @@ StackPulseMonitor/
 - **macOS 14.0+**
 - **Xcode 15.0+**
 - **iOS 17.0+** device or simulator
-- **OpenAI API key** (optional, for AI summaries)
+- **OpenAI API key** (optional, for AI chat/analysis)
+- **GitHub account** (optional, for repo import)
 
 ### Installation
 
@@ -117,9 +138,10 @@ StackPulseMonitor/
 ### Initial Setup
 
 1. **Complete Onboarding** - Quick feature walkthrough
-2. **Add OpenAI Key** (optional) - For AI-powered summaries
-3. **Configure Your Stack** - Select from presets or add custom tech
-4. **Start Monitoring** - Tap refresh to sync all data
+2. **Add OpenAI Key** (optional) - For AI chat and analysis
+3. **Import from GitHub** (optional) - Authenticate and select repos
+4. **Configure Your Stack** - Select presets or add custom tech
+5. **Start Monitoring** - View health scores and sync data
 
 ---
 
@@ -128,21 +150,31 @@ StackPulseMonitor/
 ### Pulse View (Dashboard)
 - **Health Score** - Circular progress with 0-100 score
 - **Status Breakdown** - Up-to-date, Updates, Critical counts
-- **Tech Status Cards** - Latest version + AI summary
+- **Project Cards** - Quick access to project health
 - **Critical Banner** - Immediate action required
-- **AI Key Reminder** - Prompt if not configured
-- **Pull to Refresh** - Sync entire stack
+- **Empty State** - "+ Add Project" button (navigates to Projects)
 
-### Stack View
-- **Category Grouping**:
-  - Frontend
-  - Backend
-  - Database
-  - DevOps
-  - Language
-- **Expand/Collapse** Categories
-- **Tech Cards** - Version + status at a glance
-- **Add Technology** - Search NPM or manual entry
+### Projects View
+- **Project List** - All imported and manual projects
+- **GitHub Repos** - Auto-imported with dependency detection
+- **Manual Projects** - Custom stacks and legacy imports
+- **Health Badges** - Score and status per project
+- **Delete** - Trash icon to remove projects (persists!)
+
+### Project Detail View
+- **Health Score** - Project-specific 0-100 score
+- **Dependency List** - Current vs latest version
+- **Check Updates** - Refresh dependency status
+- **AI Reports** - Historical AI analyses
+- **Ask AI** - Navigate to project-specific chat
+
+### AI Chat
+- **Thread List** - All conversation history
+- **New Thread** - Start fresh conversation
+- **Quick Prompts** - Pre-built questions
+- **Voice Input** - Mic button for speech-to-text
+- **Streaming Responses** - Real-time AI generation
+- **Message History** - Persistent across sessions
 
 ### Alerts View
 - **Filter by Type**: Critical, Update, EOL, Breaking
@@ -155,7 +187,7 @@ StackPulseMonitor/
 - **Version Comparison** - Current vs Latest
 - **Vulnerability List** - CVE IDs + summaries
 - **Release Notes** - Scrollable change log
-- **AI Summary** (requires OpenAI key):
+- **AI Analysis** (requires OpenAI key):
   - What's Changed
   - Is it Urgent
   - What to Do
@@ -164,6 +196,7 @@ StackPulseMonitor/
 
 ### Settings
 - **OpenAI Key** - Add/remove GPT-4o access
+- **GitHub Authentication** - Connect/disconnect GitHub account
 - **Notification Preferences**
 - **Sync Frequency**
 - **Data Export** - JSON stack backup
@@ -174,8 +207,9 @@ StackPulseMonitor/
 
 ### Dark Theme
 - **Background**: Near-black (`#0A0A0A`)
-- **Card Background** (`#1A1A1A`)
+- **Card Background**: (`#1A1A1A`)
 - **Accent**: Sky Blue (`#38BDF8`)
+- **AI Accent**: Purple (`#9B6DFF`)
 
 ### Status Colors
 | Status | Color | Hex |
@@ -198,9 +232,11 @@ StackPulseMonitor/
 | Component | Technology |
 |-----------|------------|
 | Framework | SwiftUI |
-| Language | Swift 5.9+ |
-| Architecture | MVVM |
+| Language | Swift 6.0+ |
+| Architecture | MVVM with `@Observable` |
 | Networking | URLSession |
+| Speech | Speech framework (SFSpeechRecognizer) |
+| Auth | ASWebAuthenticationSession (GitHub OAuth) |
 | State | `@Observable` pattern |
 | Persistence | UserDefaults + Keychain |
 
@@ -217,6 +253,13 @@ GET https://registry.npmjs.org/-/v1/search?text={query}
 ### GitHub API
 ```
 GET https://api.github.com/repos/{owner}/{repo}/releases/latest
+GET https://api.github.com/repos/{owner}/{repo}/contents/{path}
+```
+
+### GitHub OAuth
+```
+https://github.com/login/oauth/authorize
+https://github.com/login/oauth/access_token
 ```
 
 ### OSV Vulnerability Database
@@ -240,19 +283,19 @@ Model: gpt-4o
 ## 📦 Preset Technologies
 
 ### Frontend
-- React, React Native, Next.js, Vue, Expo, TypeScript
+- React, React Native, Next.js, Vue, Angular, Svelte, TypeScript, Tailwind CSS
 
 ### Backend
-- Node.js, NestJS, Express, Django, FastAPI, Laravel
+- Node.js, NestJS, Express, Django, FastAPI, Laravel, Ruby on Rails
 
 ### Database
-- PostgreSQL, MongoDB, Redis, MySQL, Prisma, Supabase
+- PostgreSQL, MongoDB, Redis, MySQL, Prisma, Supabase, Firebase
 
 ### DevOps
-- Docker, Kubernetes, GitHub Actions, Vercel, AWS, Nginx
+- Docker, Kubernetes, GitHub Actions, Vercel, AWS, Nginx, Terraform
 
 ### Languages
-- Python, Go, Rust, Java, PHP, Ruby
+- Python, Go, Rust, Java, PHP, Ruby, Swift, Kotlin
 
 ---
 
@@ -261,11 +304,17 @@ Model: gpt-4o
 ### Data Storage
 - **Stack Data** - UserDefaults (device-local)
 - **OpenAI Key** - iOS Keychain (secure)
+- **GitHub Token** - Keychain (secure)
 - **No Server** - All APIs client-side
+
+### GitHub Permissions
+- **Read-only repos** - Public/private repo access
+- **No write access** - Cannot modify code
+- **Token stored locally** - Never leaves device
 
 ### API Risks
 - NPM registry - Public data only
-- GitHub API - Subject to rate limits
+- GitHub API - Subject to rate limits (auth increases limits)
 - OSV - Security-focused database
 - EOL API - Open community project
 
@@ -289,16 +338,43 @@ Model: gpt-4o
 
 ---
 
+## 🔊 Voice-to-Text
+
+### Setup
+- **iOS Settings** → **Privacy & Security** → **Microphone** → Allow StackPulse
+- **iOS Settings** → **Privacy & Security** → **Speech Recognition** → Allow StackPulse
+
+### Usage
+1. Navigate to AI Chat
+2. Select a project
+3. Tap **mic button** (red when recording)
+4. Speak your question
+5. Tap mic again to stop
+6. Text auto-sends to AI
+
+### Limitations
+- Requires physical device (not simulator)
+- Requires internet connection
+- iOS 17.0+ only
+
+---
+
 ## 🐛 Troubleshooting
 
 ### "Rate Limited" Error
 - GitHub API has limits
-- Add a GitHub token in Settings
+- Authenticate with GitHub for higher limits
+- Wait and retry
 
 ### AI Summary Not Working
 - Check OpenAI key validity
 - Ensure sufficient API credits
 - Key stored in Settings → API Key
+
+### Voice-to-Text Not Working
+- Check microphone permissions
+- Check speech recognition permissions
+- Requires physical device (not simulator)
 
 ### Tech Not Found
 - Check package name (case-sensitive for NPM)
@@ -309,6 +385,11 @@ Model: gpt-4o
 - Check internet connection
 - Some APIs may be slow
 - Tap refresh to retry
+
+### Deleted Projects Reappearing
+- Fixed in latest build
+- Ensure you're on main branch
+- Delete → force quit → reopen should persist
 
 ---
 
