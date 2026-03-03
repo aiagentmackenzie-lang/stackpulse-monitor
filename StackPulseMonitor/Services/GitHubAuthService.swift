@@ -810,7 +810,9 @@ final class GitHubAuthService: NSObject, ObservableObject {
 // MARK: - Repository Metadata Enrichment
 
 extension GitHubAuthService {
-    /// Fetches comprehensive metadata for a repository
+    /// Fetches comprehensive metadata for a GitHub repository.
+    /// This data is stored in Project and used to provide context to the AI assistant.
+    /// Includes: description, README (truncated), topics, language stats, stars, forks, license, activity
     func fetchRepoMetadata(repo: GitHubRepository, token: String? = nil) async throws -> RepoMetadata {
         let accessToken = token ?? getAccessTokenFromKeychain() ?? ""
         
@@ -1082,17 +1084,19 @@ struct GitHubPullRequest: Codable {
 
 // MARK: - Repository Metadata Types
 
-/// Repository metadata for AI enrichment
+/// Repository metadata fetched from GitHub API for AI context enrichment.
+/// Contains project description, README excerpt, topics, language stats, popularity metrics,
+/// license info, and activity data. Stored in Project and used by AIContextBuilder.
 struct RepoMetadata: Codable {
-    let description: String?
-    let readmeContent: String?
-    let topics: [String]?
-    let starsCount: Int?
-    let forksCount: Int?
-    let license: String?
-    let lastCommitDate: Date?
-    let defaultBranch: String?
-    let languageStats: [String: Int]?
+    let description: String?           /// GitHub repo description
+    let readmeContent: String?         /// First 2000 chars of README (decoded from base64)
+    let topics: [String]?                /// Repository topics (e.g., ["nodejs", "api", "rest"])
+    let starsCount: Int?               /// GitHub star count (popularity indicator)
+    let forksCount: Int?               /// GitHub fork count (community relevance)
+    let license: String?                 /// License name (e.g., "MIT", "Apache-2.0")
+    let lastCommitDate: Date?          /// Last push date (activity indicator)
+    let defaultBranch: String?         /// Default branch name (main, master, etc.)
+    let languageStats: [String: Int]?    /// Language byte counts (e.g., {"JavaScript": 85000, "TypeScript": 15000})
 }
 
 /// GitHub API response for repo details

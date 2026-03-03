@@ -109,6 +109,9 @@ struct ProjectListView: View {
         }
     }
     
+    /// Imports repositories from GitHub with full metadata enrichment.
+    /// Fetches: description, README, topics, languages, stars, forks, license, activity.
+    /// Data stored in Project and accessed by AIContextBuilder for AI chat context.
     private func performImport(repos: [GitHubRepository]) async {
         let token = GitHubAuthService.shared.getAccessTokenFromKeychain() ?? ""
         
