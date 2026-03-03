@@ -25,6 +25,8 @@ class VersionCheckService {
             return await checkCargo(name: dependency.name)
         case .gem:
             return await checkGem(name: dependency.name)
+        case .platform:
+            return await checkPlatform(name: dependency.name)
         default:
             print("[VersionCheck] ⚠️ Unsupported type: \(dependency.type) for \(dependency.name)")
             return nil
@@ -175,6 +177,33 @@ class VersionCheckService {
         struct CargoCrate: Codable {
             let newest_version: String
         }
+    }
+    
+    // MARK: - Platform Types (map to appropriate registries)
+    
+    private func checkPlatform(name: String) async -> String? {
+        // Map platform identifiers to their package registry equivalents
+        // Note: name here is the identifier (lowercase), not the display name
+        let platformMappings: [String: (registry: String, package: String)] = [
+            "django": ("pypi", "Django"),  // PyPI needs capital D for Django
+            "fastapi": ("pypi", "fastapi"),
+            "laravel": ("pypi", "laravel"),  // Note: Laravel is PHP, may not be on PyPI
+        ]
+        
+        if let mapping = platformMappings[name] {
+            print("[VersionCheck] Mapped platform '\(name)' to \(mapping.registry) package '\(mapping.package)'")
+            switch mapping.registry {
+            case "npm":
+                return await checkNPM(name: mapping.package)
+            case "pypi":
+                return await checkPyPI(name: mapping.package)
+            default:
+                return nil
+            }
+        }
+        
+        print("[VersionCheck] No registry mapping for platform: \(name)")
+        return nil
     }
 }
 
