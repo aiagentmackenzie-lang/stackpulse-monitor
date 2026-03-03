@@ -467,6 +467,130 @@ class AppViewModel {
                 }
             }
         }
+        
+        // Generate alerts after checking versions
+        await checkProjectForAlerts(projectId: projectId)
+    }
+    
+    // MARK: - Project Alert Checking
+    
+    /// Check a project for alerts (CVEs, updates, EOL) and generate TechAlerts
+    func checkProjectForAlerts(projectId: UUID) async {
+        guard let projectIndex = projects.firstIndex(where: { $0.id == projectId }) else {
+            return
+        }
+        
+        var newAlerts: [TechAlert] = []
+        let deps = projects[projectIndex].dependencies
+        
+        for dep in deps {
+            // Skip dependencies without known versions
+            guard !dep.currentVersion.isEmpty else { continue }
+            
+            // Check for CVEs (vulnerabilities)
+            do {
+                let vulns = try await network.fetchOSVVulnerabilities(
+                    packageName: dep.name,
+                    ecosystem: dep.type.rawValue
+                )
+                
+                if !vulns.isEmpty {
+                    let severity = vulns.first?.severity?.first?.score ?? "UNKNOWN"
+                    newAlerts.append(TechAlert(
+                        techId: dep.id,
+                        techName: dep.name,
+                        type: .critical,
+                        title: "CVE Found in \(dep.name)",
+                        message: vulns.first?.summary ?? "Vulnerability detected",
+                        severity: severity
+                    ))
+                }
+            } catch {
+                // CVE check unavailable
+            }
+            
+            // Check for updates
+            if let latest = dep.latestVersion, dep.isOutdated {
+                let isMajor = isMajorUpdate(current: dep.currentVersion, latest: latest)
+                if isMajor {
+                    newAlerts.append(TechAlert(
+                        techId: dep.id,
+                        techName: dep.name,
+                        type: .update,
+                        title: "Major Update: \(dep.name)",
+                        message: "\(dep.currentVersion) → \(latest)",
+                        severity: "MEDIUM"
+                    ))
+                }
+            }
+            
+            // Check for EOL
+            let preset = PresetTech.all.first { $0.name.lowercased() == dep.name.lowercased() }
+            if let eolSlug = preset?.eolSlug {
+                do {
+                    let eolData = try await network.fetchEOL(eolSlug)
+                    if let first = eolData.first {
+                        if case .string(let dateStr) = first.eol {
+                            newAlerts.append(TechAlert(
+                                techId: dep.id,
+                                techName: dep.name,
+                                type: .eol,
+                                title: "EOL Warning: \(dep.name)",
+                                message: "End of Life: \(dateStr)",
+                                severity: "LOW"
+                            ))
+                        } else if case .bool(let isEol) = first.eol, isEol {
+                            newAlerts.append(TechAlert(
+                                techId: dep.id,
+                                techName: dep.name,
+                                type: .eol,
+                                title: "EOL Warning: \(dep.name)",
+                                message: "Already End of Life",
+                                severity: "LOW"
+                            ))
+                        }
+                    }
+                } catch {
+                    // EOL check unavailable
+                }
+            }
+        }
+        
+        // Merge new alerts, preserving dismissed state
+        let existingDismissed = Set(alerts.filter(\.isDismissed).map { "\($0.techId)-\($0.type)" })
+        let mergedAlerts = newAlerts.map { alert in
+            var a = alert
+            let key = "\(a.techId)-\(a.type)"
+            if existingDismissed.contains(key) {
+                a.isDismissed = true
+            }
+            return a
+        }
+        
+        // Add to existing alerts (replace any for same tech+type)
+        var alertMap = Dictionary(uniqueKeysWithValues: alerts.map { ("\($0.techId)-\($0.type)", $0) })
+        for alert in mergedAlerts {
+            alertMap["\(alert.techId)-\(alert.type)"] = alert
+        }
+        alerts = Array(alertMap.values)
+        
+        // Process through AlertManager for notifications
+        alertManager.processAlerts(mergedAlerts, forProject: projectId)
+        
+        // Save alerts
+        storage.saveAlerts(alerts)
+        
+        // Update badge
+        Task {
+            try? await UNUserNotificationCenter.current().setBadgeCount(activeAlerts.count)
+        }
+    }
+    
+    /// Check all projects for alerts
+    func checkAllProjectsForAlerts() async {
+        for project in projects {
+            await checkProjectForAlerts(projectId: project.id)
+        }
     }
     
     // MARK: - AI Analysis

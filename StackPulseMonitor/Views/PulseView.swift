@@ -8,6 +8,7 @@ struct PulseView: View {
     @State private var checkProgress = ""
     @State private var showMultiProjectAnalysis = false
     @State private var showProjectPicker = false
+    @State private var isSyncing = false
     
     var body: some View {
         NavigationStack {
@@ -87,16 +88,45 @@ struct PulseView: View {
             .padding(.horizontal, 16)
             .padding(.top, 8)
             
-            // Last updated
-            if let lastUpdate = lastUpdateTime {
-                HStack {
-                    Spacer()
+            // Sync All button and last updated
+            HStack {
+                // Sync All button
+                Button {
+                    Task {
+                        isSyncing = true
+                        await viewModel.checkAllProjectsForAlerts()
+                        isSyncing = false
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        if isSyncing {
+                            ProgressView()
+                                .tint(Theme.accent)
+                                .scaleEffect(0.7)
+                        } else {
+                            Image(systemName: "bell.badge")
+                        }
+                        Text(isSyncing ? "Scanning..." : "Scan for Alerts")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .foregroundStyle(Theme.accent)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Theme.accent.opacity(0.1))
+                    .clipShape(.rect(cornerRadius: 8))
+                }
+                .disabled(isSyncing || viewModel.projects.isEmpty)
+                
+                Spacer()
+                
+                // Last updated
+                if let lastUpdate = lastUpdateTime {
                     Label("Updated \(timeAgo(from: lastUpdate))", systemImage: "clock")
                         .font(.caption)
                         .foregroundStyle(Theme.muted)
                 }
-                .padding(.horizontal, 16)
             }
+            .padding(.horizontal, 16)
         }
     }
     

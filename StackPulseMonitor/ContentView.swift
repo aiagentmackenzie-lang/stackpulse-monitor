@@ -42,7 +42,11 @@ struct ContentView: View {
                     withAnimation(.easeInOut(duration: 0.4)) {
                         phase = .main
                     }
-                    Task { await viewModel.syncStack() }
+                    Task {
+                        // Sync both legacy stack and new projects
+                        await viewModel.syncStack()
+                        await viewModel.checkAllProjectsForAlerts()
+                    }
                 }
                 .transition(.move(edge: .trailing))
 
