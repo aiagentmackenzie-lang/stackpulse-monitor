@@ -44,6 +44,11 @@ class AppViewModel {
     var updateCount: Int { stackItems.filter { $0.status == .update }.count }
     var criticalCount: Int { stackItems.filter { $0.status == .critical }.count }
     var activeAlerts: [TechAlert] { alerts.filter { !$0.isDismissed && ($0.snoozedUntil == nil || $0.snoozedUntil! < Date()) } }
+    
+    /// Alerts that haven't been read yet (for badge)
+    var unreadAlerts: [TechAlert] { 
+        activeAlerts.filter { !$0.isRead } 
+    }
 
     func loadFromStorage() {
         // Load new project-centric data
