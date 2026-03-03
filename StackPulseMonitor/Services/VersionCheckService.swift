@@ -14,6 +14,8 @@ class VersionCheckService {
     
     /// Check version for a single dependency
     func checkVersion(_ dependency: Dependency) async -> String? {
+        print("[VersionCheck] Checking \(dependency.name) (type: \(dependency.type.rawValue))")
+        
         switch dependency.type {
         case .npm:
             return await checkNPM(name: dependency.name)
@@ -21,9 +23,55 @@ class VersionCheckService {
             return await checkPyPI(name: dependency.name)
         case .cargo:
             return await checkCargo(name: dependency.name)
+        case .gem:
+            return await checkGem(name: dependency.name)
         default:
+            print("[VersionCheck] ⚠️ Unsupported type: \(dependency.type) for \(dependency.name)")
             return nil
         }
+    }
+    
+    /// Validate all registry endpoints work (for diagnostics)
+    func validateRegistries() async -> [String: Bool] {
+        var results: [String: Bool] = [:]
+        
+        // Test NPM with known package
+        if let npm = await checkNPM(name: "express") {
+            results["NPM"] = !npm.isEmpty
+            print("[Validate] NPM ✓ (express@\(npm))")
+        } else {
+            results["NPM"] = false
+            print("[Validate] NPM ✗")
+        }
+        
+        // Test PyPI with known package
+        if let pypi = await checkPyPI(name: "requests") {
+            results["PyPI"] = !pypi.isEmpty
+            print("[Validate] PyPI ✓ (requests@\(pypi))")
+        } else {
+            results["PyPI"] = false
+            print("[Validate] PyPI ✗")
+        }
+        
+        // Test Cargo with known crate
+        if let cargo = await checkCargo(name: "serde") {
+            results["Cargo"] = !cargo.isEmpty
+            print("[Validate] Cargo ✓ (serde@\(cargo))")
+        } else {
+            results["Cargo"] = false
+            print("[Validate] Cargo ✗")
+        }
+        
+        // Test RubyGems with known gem
+        if let gem = await checkGem(name: "rails") {
+            results["RubyGems"] = !gem.isEmpty
+            print("[Validate] RubyGems ✓ (rails@\(gem))")
+        } else {
+            results["RubyGems"] = false
+            print("[Validate] RubyGems ✗")
+        }
+        
+        return results
     }
     
     /// Check multiple dependencies with rate limiting
@@ -82,6 +130,26 @@ class VersionCheckService {
         struct PyPIInfo: Codable {
             let version: String
         }
+    }
+    
+    // MARK: - RubyGems
+    
+    private func checkGem(name: String) async -> String? {
+        let cleanName = name.replacingOccurrences(of: "\n", with: ":")
+        let url = URL(string: "https://rubygems.org/api/v1/gems/\(cleanName).json")!
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let response = try JSONDecoder().decode(GemResponse.self, from: data)
+            return response.version
+        } catch {
+            print("❌ RubyGems check failed for \(name): \(error)")
+            return nil
+        }
+    }
+    
+    struct GemResponse: Codable {
+        let version: String
     }
     
     // MARK: - Cargo/Crates.io
