@@ -172,23 +172,21 @@ class AppViewModel {
 
     /// Mark all active alerts as read and clear notifications
     func markAllAlertsAsRead() {
-        // Get active (non-dismissed, non-snoozed) alerts
-        let active = alerts.filter { !$0.isDismissed && ($0.snoozedUntil == nil || $0.snoozedUntil! < Date()) }
-        
-        // Mark as read
-        for alert in active {
-            if let index = alerts.firstIndex(where: { $0.id == alert.id }) {
+        // Mark ALL alerts as read (not just active ones)
+        for index in alerts.indices {
+            if !alerts[index].isRead {
                 alerts[index].isRead = true
                 alerts[index].readAt = Date()
             }
-            // Cancel notification
-            alertManager.cancelNotification(for: alert.id)
+            // Cancel notification for this alert
+            alertManager.cancelNotification(for: alerts[index].id)
         }
         
-        // Save if any changed
-        if !active.isEmpty {
-            storage.saveAlerts(alerts)
-        }
+        // Also clear any orphaned notifications (notifications for alerts that no longer exist)
+        alertManager.cancelAllNotifications()
+        
+        // Save changes
+        storage.saveAlerts(alerts)
     }
 
     func completeSetup() {
@@ -377,6 +375,12 @@ class AppViewModel {
     
     /// Clear notification badge
     func clearNotificationBadge() {
+        alertManager.clearBadge()
+    }
+
+    /// Clear all notifications
+    func clearAllNotifications() {
+        alertManager.cancelAllNotifications()
         alertManager.clearBadge()
     }
     

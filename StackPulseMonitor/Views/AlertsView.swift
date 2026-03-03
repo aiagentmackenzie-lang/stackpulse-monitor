@@ -49,11 +49,11 @@ struct AlertsView: View {
             .navigationTitle("Alerts")
             .toolbarBackground(Theme.background, for: .navigationBar)
             .onAppear {
-                // Mark all active alerts as read when viewing
+                // Mark all alerts as read and clear ALL notifications
                 viewModel.markAllAlertsAsRead()
                 
-                // Clear notification badge
-                viewModel.clearNotificationBadge()
+                // Also directly clear all notifications as a safety net
+                viewModel.clearAllNotifications()
             }
             .navigationDestination(item: $selectedProjectId) { projectId in
                 ProjectDetailView(projectId: projectId, viewModel: viewModel)
