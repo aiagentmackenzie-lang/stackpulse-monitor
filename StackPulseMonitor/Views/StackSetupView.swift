@@ -23,6 +23,7 @@ struct StackSetupView: View {
 
     @State private var selectedPresets: Set<String> = []
     @State private var customName = ""
+    @State private var customVersion = ""
     @State private var customType: TechType = .npm
     @State private var expandedCategories: Set<TechCategory> = Set(TechCategory.allCases)
 
@@ -99,19 +100,34 @@ struct StackSetupView: View {
                                 .font(.headline)
                                 .foregroundStyle(Theme.textPrimary)
 
-                            HStack(spacing: 8) {
-                                TextField("Package name...", text: $customName)
-                                    .textInputAutocapitalization(.never)
-                                    .autocorrectionDisabled()
-                                    .font(.body)
-                                    .foregroundStyle(Theme.textPrimary)
-                                    .padding(10)
-                                    .background(Theme.cardBackground)
-                                    .clipShape(.rect(cornerRadius: 8))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(Theme.border, lineWidth: 1)
-                                    )
+                            HStack(alignment: .top, spacing: 8) {
+                                VStack(spacing: 8) {
+                                    TextField("Package name...", text: $customName)
+                                        .textInputAutocapitalization(.never)
+                                        .autocorrectionDisabled()
+                                        .font(.body)
+                                        .foregroundStyle(Theme.textPrimary)
+                                        .padding(10)
+                                        .background(Theme.cardBackground)
+                                        .clipShape(.rect(cornerRadius: 8))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Theme.border, lineWidth: 1)
+                                        )
+                                    
+                                    TextField("Version (e.g., 1.2.3)", text: $customVersion)
+                                        .textInputAutocapitalization(.never)
+                                        .autocorrectionDisabled()
+                                        .font(.body)
+                                        .foregroundStyle(Theme.textSecondary)
+                                        .padding(10)
+                                        .background(Theme.cardBackground)
+                                        .clipShape(.rect(cornerRadius: 8))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Theme.border, lineWidth: 1)
+                                        )
+                                }
 
                                 Button {
                                     addCustomTech()
@@ -119,7 +135,7 @@ struct StackSetupView: View {
                                     Image(systemName: "plus")
                                         .font(.headline)
                                         .foregroundStyle(.white)
-                                        .frame(width: 44, height: 44)
+                                        .frame(width: 44, height: 88)
                                         .background(Theme.accent)
                                         .clipShape(.rect(cornerRadius: 8))
                                 }
@@ -182,7 +198,7 @@ struct StackSetupView: View {
                                     name: tech.name,
                                     type: tech.type,
                                     category: tech.category,
-                                    currentVersion: "",
+                                    currentVersion: tech.currentVersion,
                                     latestVersion: nil
                                 )
                             }
@@ -354,14 +370,17 @@ struct StackSetupView: View {
 
     private func addCustomTech() {
         let name = customName.trimmingCharacters(in: .whitespaces)
+        let version = customVersion.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return }
         let tech = Technology(
             name: name,
             type: customType,
             identifier: name.lowercased(),
-            category: .other
+            category: .other,
+            currentVersion: version
         )
         viewModel.addTechnology(tech)
         customName = ""
+        customVersion = ""
     }
 }
