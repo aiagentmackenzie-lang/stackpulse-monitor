@@ -47,9 +47,14 @@ final class AlertManager: ObservableObject {
 
     // MARK: - Alert Processing
 
+    private var currentProjectId: UUID? = nil
+
     /// Process new alerts and schedule notifications if appropriate
     func processAlerts(_ alerts: [TechAlert], forProject projectId: UUID? = nil) {
         guard prefs.notificationsEnabled, hasPermission else { return }
+        
+        // Store projectId for notification payload
+        self.currentProjectId = projectId
 
         for alert in alerts {
             guard shouldNotify(alert: alert, projectId: projectId) else { continue }
@@ -61,6 +66,9 @@ final class AlertManager: ObservableObject {
                 scheduleNotification(alert)
             }
         }
+        
+        // Clear after processing
+        self.currentProjectId = nil
     }
 
     /// Determine if an alert should trigger a notification
@@ -111,11 +119,15 @@ final class AlertManager: ObservableObject {
         content.categoryIdentifier = "ALERT"
 
         // Add custom data for deep linking
-        content.userInfo = [
+        var userInfo: [String: String] = [
             "alertId": alert.id.uuidString,
             "techId": alert.techId.uuidString,
             "type": alert.type.rawValue
         ]
+        if let projectId = currentProjectId {
+            userInfo["projectId"] = projectId.uuidString
+        }
+        content.userInfo = userInfo
 
         // Immediate notification
         let request = UNNotificationRequest(
@@ -138,11 +150,17 @@ final class AlertManager: ObservableObject {
         content.sound = .default
         content.badge = 1
         content.categoryIdentifier = "ALERT"
-        content.userInfo = [
+        
+        // Add custom data for deep linking
+        var userInfo: [String: String] = [
             "alertId": alert.id.uuidString,
             "techId": alert.techId.uuidString,
             "type": alert.type.rawValue
         ]
+        if let projectId = currentProjectId {
+            userInfo["projectId"] = projectId.uuidString
+        }
+        content.userInfo = userInfo
 
         // Schedule after quiet hours end
         var dateComponents = DateComponents()

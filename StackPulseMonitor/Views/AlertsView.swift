@@ -4,6 +4,7 @@ struct AlertsView: View {
     let viewModel: AppViewModel
     @State private var selectedFilter: AlertFilter = .all
     @State private var selectedTech: Technology?
+    @State private var selectedProjectId: UUID?
 
     private enum AlertFilter: String, CaseIterable {
         case all = "ALL"
@@ -53,6 +54,9 @@ struct AlertsView: View {
                 
                 // Clear notification badge
                 viewModel.clearNotificationBadge()
+            }
+            .navigationDestination(item: $selectedProjectId) { projectId in
+                ProjectDetailView(projectId: projectId, viewModel: viewModel)
             }
             .sheet(item: $selectedTech) { tech in
                 TechnologyDetailView(viewModel: viewModel, technology: tech)
@@ -115,7 +119,14 @@ struct AlertsView: View {
 
     private func alertCard(_ alert: TechAlert) -> some View {
         Button {
-            if let tech = viewModel.stackItems.first(where: { $0.id == alert.techId }) {
+            // Mark as read when tapped
+            viewModel.markAlertAsRead(alert.id)
+            
+            // Try to find project first (new model)
+            if let project = viewModel.findProject(forTechId: alert.techId) {
+                selectedProjectId = project.id
+            } else if let tech = viewModel.stackItems.first(where: { $0.id == alert.techId }) {
+                // Legacy fallback
                 selectedTech = tech
             }
         } label: {

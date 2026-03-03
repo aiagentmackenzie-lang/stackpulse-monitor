@@ -635,6 +635,32 @@ class AppViewModel {
         }
     }
     
+    // MARK: - Navigation Helpers
+    
+    /// Find the project containing a specific dependency/technology
+    func findProject(forTechId techId: UUID) -> Project? {
+        // Search in project dependencies first (new model)
+        if let project = projects.first(where: { project in
+            project.dependencies.contains { $0.id == techId }
+        }) {
+            return project
+        }
+        
+        // Legacy: check if techId matches a project's dependency name
+        // This handles alerts for dependencies that might not be in the new model yet
+        return nil
+    }
+    
+    /// Get dependency details for a given techId
+    func getDependency(forTechId techId: UUID) -> Dependency? {
+        for project in projects {
+            if let dep = project.dependencies.first(where: { $0.id == techId }) {
+                return dep
+            }
+        }
+        return nil
+    }
+    
     // MARK: - AI Analysis
     
     /// Generate AI-powered analysis report for a project
