@@ -274,6 +274,23 @@ struct ProjectCard: View {
                             .font(.headline)
                             .foregroundStyle(Theme.textPrimary)
                         
+                        // GitHub enrichment display
+                        if project.source == .github {
+                            HStack(spacing: 8) {
+                                if let stars = project.starsCount, stars > 0 {
+                                    Label("\(stars)", systemImage: "star.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(.yellow)
+                                }
+                                if let topics = project.topics, !topics.isEmpty {
+                                    Text(topics.prefix(3).joined(separator: ", "))
+                                        .font(.caption2)
+                                        .foregroundStyle(Theme.textSecondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
+                        
                         HStack(spacing: 8) {
                             Label("\(project.dependencyCount)", systemImage: "shippingbox")
                                 .font(.caption)
@@ -305,16 +322,28 @@ struct ProjectCard: View {
             .buttonStyle(.plain)
             
             // Dependencies (if expanded)
-            if project.isExpanded && !project.dependencies.isEmpty {
-                Divider()
-                    .background(Theme.border)
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(project.dependencies) { dep in
-                        DependencyRow(dependency: dep)
-                    }
+            if project.isExpanded {
+                // Show GitHub description if available
+                if let description = project.description, !description.isEmpty {
+                    Text(description)
+                        .font(.caption)
+                        .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(2)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
                 }
-                .padding(16)
+                
+                if !project.dependencies.isEmpty {
+                    Divider()
+                        .background(Theme.border)
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(project.dependencies) { dep in
+                            DependencyRow(dependency: dep)
+                        }
+                    }
+                    .padding(16)
+                }
             }
         }
         .background(Color(hex: 0x1A1A1A))
