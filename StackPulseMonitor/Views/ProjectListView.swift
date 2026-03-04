@@ -122,7 +122,11 @@ struct ProjectListView: View {
                 githubFullName: repo.fullName
             )
             
-            // Fetch GitHub enrichment data
+            // ALWAYS set basic enrichment from repo list (this always works)
+            project.description = repo.description
+            project.starsCount = repo.stargazersCount
+            
+            // Try to fetch additional enrichment data (README, topics, languages)
             print("🔍 Fetching metadata for \(repo.fullName)...")
             do {
                 let metadata = try await GitHubAuthService.shared.fetchRepoMetadata(
@@ -136,8 +140,10 @@ struct ProjectListView: View {
                 print("  - Topics: \(metadata.topics ?? [])")
                 print("  - Languages: \(metadata.languageStats?.keys.sorted() ?? [])")
                 
-                // Enrich project with GitHub data
-                project.description = metadata.description
+                // Enrich project with GitHub data (override with richer data)
+                if let desc = metadata.description, !desc.isEmpty {
+                    project.description = desc
+                }
                 project.readmeContent = metadata.readmeContent
                 project.topics = metadata.topics
                 project.starsCount = metadata.starsCount
@@ -152,7 +158,7 @@ struct ProjectListView: View {
                 print("❌ Failed to fetch metadata for \(repo.name):")
                 print("  Error: \(error)")
                 print("  Token empty: \(token.isEmpty)")
-                // Continue without enrichment - project still created
+                // Continue - project still has repo.description and repo.stargazersCount
             }
             
             do {

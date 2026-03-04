@@ -283,7 +283,11 @@ struct StackSetupView: View {
                 githubFullName: repo.fullName
             )
             
-            // Fetch GitHub enrichment data
+            // ALWAYS set basic enrichment from repo list (this always works)
+            project.description = repo.description
+            project.starsCount = repo.stargazersCount
+            
+            // Try to fetch additional enrichment data (README, topics, languages)
             print("🔍 [StackSetup] Fetching metadata for \(repo.fullName)...")
             do {
                 let metadata = try await GitHubAuthService.shared.fetchRepoMetadata(
@@ -293,7 +297,10 @@ struct StackSetupView: View {
                 
                 print("✅ [StackSetup] Got metadata for \(repo.name)")
                 
-                project.description = metadata.description
+                // Override with richer data from API
+                if let desc = metadata.description, !desc.isEmpty {
+                    project.description = desc
+                }
                 project.readmeContent = metadata.readmeContent
                 project.topics = metadata.topics
                 project.starsCount = metadata.starsCount
@@ -304,6 +311,7 @@ struct StackSetupView: View {
                 project.languageStats = metadata.languageStats
             } catch {
                 print("❌ [StackSetup] Failed to fetch metadata: \(error)")
+                // Fallback: project still has repo.description and repo.stargazersCount
             }
             
             // Detect dependencies

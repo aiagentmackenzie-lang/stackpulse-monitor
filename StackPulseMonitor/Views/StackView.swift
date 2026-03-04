@@ -438,7 +438,11 @@ struct AddTechnologySheet: View {
                 githubFullName: repo.fullName
             )
             
-            // Fetch GitHub enrichment data
+            // ALWAYS set basic enrichment from repo list (this always works)
+            project.description = repo.description
+            project.starsCount = repo.stargazersCount
+            
+            // Try to fetch additional enrichment data (README, topics, languages)
             print("🔍 [StackView] Fetching metadata for \(repo.fullName)...")
             do {
                 let metadata = try await GitHubAuthService.shared.fetchRepoMetadata(
@@ -448,7 +452,10 @@ struct AddTechnologySheet: View {
                 
                 print("✅ [StackView] Got metadata for \(repo.name)")
                 
-                project.description = metadata.description
+                // Override with richer data from API
+                if let desc = metadata.description, !desc.isEmpty {
+                    project.description = desc
+                }
                 project.readmeContent = metadata.readmeContent
                 project.topics = metadata.topics
                 project.starsCount = metadata.starsCount
@@ -459,6 +466,7 @@ struct AddTechnologySheet: View {
                 project.languageStats = metadata.languageStats
             } catch {
                 print("❌ [StackView] Failed to fetch metadata: \(error)")
+                // Fallback: project still has repo.description and repo.stargazersCount
             }
             
             // Detect dependencies
