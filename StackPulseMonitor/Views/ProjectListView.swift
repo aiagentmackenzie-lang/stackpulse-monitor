@@ -280,21 +280,34 @@ struct ProjectCard: View {
                             .font(.headline)
                             .foregroundStyle(Theme.textPrimary)
                         
-                        // GitHub enrichment display
+                        // GitHub enrichment display - always visible
                         if project.source == .github {
-                            HStack(spacing: 8) {
+                            HStack(spacing: 12) {
                                 if let stars = project.starsCount, stars > 0 {
                                     Label("\(stars)", systemImage: "star.fill")
-                                        .font(.caption2)
+                                        .font(.caption)
                                         .foregroundStyle(.yellow)
                                 }
-                                if let topics = project.topics, !topics.isEmpty {
-                                    Text(topics.prefix(3).joined(separator: ", "))
+                                if let forks = project.forksCount, forks > 0 {
+                                    Label("\(forks)", systemImage: "tuningfork")
+                                        .font(.caption)
+                                        .foregroundStyle(Theme.textSecondary)
+                                }
+                                if let license = project.license {
+                                    Text(license)
                                         .font(.caption2)
                                         .foregroundStyle(Theme.textSecondary)
-                                        .lineLimit(1)
                                 }
                             }
+                        }
+                        
+                        // Project description - always visible, larger
+                        if let description = project.description, !description.isEmpty {
+                            Text(description)
+                                .font(.subheadline)
+                                .foregroundStyle(Theme.textSecondary)
+                                .lineLimit(3)
+                                .padding(.top, 4)
                         }
                         
                         HStack(spacing: 8) {
@@ -329,15 +342,6 @@ struct ProjectCard: View {
             
             // Dependencies (if expanded)
             if project.isExpanded {
-                // Show GitHub description if available
-                if let description = project.description, !description.isEmpty {
-                    Text(description)
-                        .font(.caption)
-                        .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(2)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 8)
-                }
                 
                 if !project.dependencies.isEmpty {
                     Divider()
