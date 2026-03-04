@@ -334,9 +334,9 @@ struct ProjectCard: View {
                     Text(description)
                         .font(.subheadline)
                         .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(4)
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
+                        .padding(.bottom, 12)
                 }
                 
                 if !project.dependencies.isEmpty {
