@@ -24,9 +24,13 @@ struct AIContextBuilder {
             print("🔍 [AIContextBuilder] topics: \(project.topics ?? [])")
             print("🔍 [AIContextBuilder] stars: \(project.starsCount ?? 0)")
             
+            // Add clear header for AI
+            context += "\n=== GITHUB PROJECT CONTEXT ===\n"
+            
             let githubContext = buildGitHubContext(for: project)
             print("🔍 [AIContextBuilder] GitHub context length: \(githubContext.count)")
             context += githubContext
+            context += "=== END GITHUB CONTEXT ===\n"
         } else {
             print("🔍 [AIContextBuilder] Project source is: \(project.source), skipping GitHub context")
         }
@@ -84,8 +88,11 @@ struct AIContextBuilder {
         • Recommending update priorities
         • Comparing dependency health across projects
         • Answering questions about specific packages
+        • Answering general questions about the project (purpose, tech stack, README content)
         
-        Be concise, helpful, and specific to this project's dependencies.
+        The GitHub context above (description, README, topics, languages) gives you insight into what this project does. Use it to answer questions beyond just dependencies.
+        
+        Be concise, helpful, and specific to this project's dependencies and context.
         """
         
         return context
