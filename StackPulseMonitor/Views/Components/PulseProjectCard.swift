@@ -38,9 +38,9 @@ struct PulseProjectCard: View {
     
     var body: some View {
         Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 16) {
                 // Header: Name + Health Score
-                HStack {
+                HStack(alignment: .top) {
                     // Project icon/name
                     HStack(spacing: 8) {
                         Image(systemName: project.isFromGitHub ? "folder.fill" : "doc.fill")
@@ -70,27 +70,49 @@ struct PulseProjectCard: View {
                 Divider()
                     .background(Theme.border)
                 
-                // Stats row
-                HStack(spacing: 16) {
+                // Stats row - expanded for better readability
+                HStack(spacing: 20) {
                     // Total deps
-                    Label("\(project.dependencyCount)", systemImage: "shippingbox")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.textSecondary)
-                    
-                    if outdatedCount > 0 {
-                        Label("\(outdatedCount) outdated", systemImage: "exclamationmark.triangle")
-                            .font(.subheadline)
-                            .foregroundStyle(.orange)
+                    VStack(spacing: 4) {
+                        Text("\(project.dependencyCount)")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(Theme.textPrimary)
+                        Text("Total")
+                            .font(.caption2)
+                            .foregroundStyle(Theme.textSecondary)
                     }
                     
-                    if unknownCount > 0 {
-                        Label("\(unknownCount) unknown", systemImage: "questionmark.circle")
-                            .font(.subheadline)
-                            .foregroundStyle(.gray)
+                    Divider()
+                        .frame(height: 30)
+                        .background(Theme.border)
+                    
+                    // Outdated
+                    VStack(spacing: 4) {
+                        Text("\(outdatedCount)")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(outdatedCount > 0 ? .orange : .green)
+                        Text("Outdated")
+                            .font(.caption2)
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    
+                    Divider()
+                        .frame(height: 30)
+                        .background(Theme.border)
+                    
+                    // Unknown
+                    VStack(spacing: 4) {
+                        Text("\(unknownCount)")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(unknownCount > 0 ? .gray : Theme.textPrimary)
+                        Text("Unknown")
+                            .font(.caption2)
+                            .foregroundStyle(Theme.textSecondary)
                     }
                     
                     Spacer()
                 }
+                .padding(.vertical, 8)
                 
                 // Last checked indicator
                 if let lastChecked = project.dependencies.compactMap({ $0.lastChecked }).max() {
@@ -102,7 +124,7 @@ struct PulseProjectCard: View {
                     }
                 }
             }
-            .padding(16)
+            .padding(20)
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Color(hex: 0x1A1A1A))
@@ -132,14 +154,14 @@ struct HealthScoreBadge: View {
         ZStack {
             Circle()
                 .fill(color.opacity(0.15))
-                .frame(width: 48, height: 48)
+                .frame(width: 56, height: 56)
             
             VStack(spacing: 0) {
                 Text("\(score)")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
                     .foregroundStyle(color)
                 Text("%")
-                    .font(.system(size: 8, weight: .medium))
+                    .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(color)
             }
         }
