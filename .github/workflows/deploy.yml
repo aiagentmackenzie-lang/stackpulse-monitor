@@ -1,0 +1,106 @@
+name: Deploy
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+
+jobs:
+  build-ipa:
+    name: Build IPA
+    runs-on: macos-latest
+    outputs:
+      IPA_PATH: ${{ steps.build.outputs.IPA_PATH }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+      
+      - name: Import Certificate
+        env:
+          CERTIFICATE: ${{ secrets.CERTIFICATE }}
+          KEY_PASSWORD: ${{ secrets.CERTIFICATE_KEY_PASSWORD }}
+        run: |
+          echo -n "$CERTIFICATE" | base64 --decode -o certificate.p12
+          security create-keychain -p "" temporary-build.keychain
+          security default-keychain -s temporary-build.keychain
+          security unlock-keychain -p "" temporary-build.keychain
+          security import certificate.p12 -P "$KEY_PASSWORD" -A -t cert
+          security set-key-partitions-list -S apple-tool:,apple: -k "" -D "" temporary-build.keychain
+          rm certificate.p12
+      
+      - name: Build IPA
+        id: build
+        env:
+          PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+        run: |
+          echo -n "$PROVISIONING_PROFILE" | base64 --decode -o profile.mobileprovision
+          
+          xcodebuild exportArchive \
+            -archivePath Build/StackPulseMonitor.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath ./output \
+            -allowProvisioningUpdates \
+            -allowProvisioningDeviceRegistration
+        
+          echo "IPA_PATH=output/StackPulseMonitor.ipa" >> $GITHUB_OUTPUT
+      
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: StackPulseMonitor-IPA
+          path: output/StackPulseMonitor.ipa
+
+  testflight:
+    name: Upload to TestFlight
+    runs-on: macos-latest
+    needs: build-ipa
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Download IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: StackPulseMonitor-IPA
+      
+      - name: Upload to TestFlight
+        env:
+          APPLE_CONNECT_USERNAME: ${{ secrets.APPLE_CONNECT_USERNAME }}
+          APPLE_CONNECT_PASSWORD: ${{ secrets.APPLE_CONNECT_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcrun altool --upload-app -f StackPulseMonitor.ipa -t ios -u "$APPLE_CONNECT_USERNAME" -p "$APPLE_CONNECT_PASSWORD" --team-id "$APPLE_TEAM_ID"
+
+  github-release:
+    name: GitHub Release
+    runs-on: macos-latest
+    needs: build-ipa
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Download IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: StackPulseMonitor-IPA
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: StackPulseMonitor.ipa
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
