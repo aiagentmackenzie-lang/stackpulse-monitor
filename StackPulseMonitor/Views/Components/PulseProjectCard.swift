@@ -38,23 +38,23 @@ struct PulseProjectCard: View {
     
     var body: some View {
         Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 12) {
                 // Header: Name + Health Score
-                HStack(alignment: .top) {
+                HStack(alignment: .center) {
                     // Project icon/name
                     HStack(spacing: 8) {
                         Image(systemName: project.isFromGitHub ? "folder.fill" : "doc.fill")
                             .foregroundStyle(Theme.accent)
-                            .font(.title3)
+                            .font(.body)
                         
                         VStack(alignment: .leading, spacing: 2) {
                             Text(project.name)
-                                .font(.headline)
+                                .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(Theme.textPrimary)
                             
                             if let fullName = project.githubFullName {
                                 Text(fullName)
-                                    .font(.caption)
+                                    .font(.caption2)
                                     .foregroundStyle(Theme.textSecondary)
                                     .lineLimit(1)
                             }
@@ -70,61 +70,44 @@ struct PulseProjectCard: View {
                 Divider()
                     .background(Theme.border)
                 
-                // Stats row - expanded for better readability
-                HStack(spacing: 20) {
+                // Stats row - compact
+                HStack(spacing: 16) {
                     // Total deps
-                    VStack(spacing: 4) {
+                    HStack(spacing: 4) {
                         Text("\(project.dependencyCount)")
-                            .font(.title3.weight(.bold))
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Theme.textPrimary)
-                        Text("Total")
+                        Text("total")
                             .font(.caption2)
                             .foregroundStyle(Theme.textSecondary)
                     }
                     
-                    Divider()
-                        .frame(height: 30)
-                        .background(Theme.border)
-                    
-                    // Outdated
-                    VStack(spacing: 4) {
-                        Text("\(outdatedCount)")
-                            .font(.title3.weight(.bold))
-                            .foregroundStyle(outdatedCount > 0 ? .orange : .green)
-                        Text("Outdated")
-                            .font(.caption2)
-                            .foregroundStyle(Theme.textSecondary)
-                    }
-                    
-                    Divider()
-                        .frame(height: 30)
-                        .background(Theme.border)
-                    
-                    // Unknown
-                    VStack(spacing: 4) {
-                        Text("\(unknownCount)")
-                            .font(.title3.weight(.bold))
-                            .foregroundStyle(unknownCount > 0 ? .gray : Theme.textPrimary)
-                        Text("Unknown")
-                            .font(.caption2)
-                            .foregroundStyle(Theme.textSecondary)
+                    if outdatedCount > 0 {
+                        HStack(spacing: 4) {
+                            Text("\(outdatedCount)")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.orange)
+                            Text("outdated")
+                                .font(.caption2)
+                                .foregroundStyle(.orange.opacity(0.8))
+                        }
                     }
                     
                     Spacer()
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, 4)
                 
                 // Last checked indicator
                 if let lastChecked = project.dependencies.compactMap({ $0.lastChecked }).max() {
                     HStack {
                         Spacer()
                         Label("Checked \(timeAgo(from: lastChecked))", systemImage: "clock")
-                            .font(.caption)
+                            .font(.caption2)
                             .foregroundStyle(Theme.muted)
                     }
                 }
             }
-            .padding(20)
+            .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Color(hex: 0x1A1A1A))
@@ -154,14 +137,11 @@ struct HealthScoreBadge: View {
         ZStack {
             Circle()
                 .fill(color.opacity(0.15))
-                .frame(width: 56, height: 56)
+                .frame(width: 40, height: 40)
             
             VStack(spacing: 0) {
                 Text("\(score)")
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundStyle(color)
-                Text("%")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
                     .foregroundStyle(color)
             }
         }
