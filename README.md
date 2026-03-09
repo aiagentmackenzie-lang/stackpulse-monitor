@@ -5,7 +5,7 @@ Your personal tech stack health monitor with AI-powered insights. Track dependen
 ![Swift](https://img.shields.io/badge/Swift-6.0+-orange.svg)
 ![iOS](https://img.shields.io/badge/iOS-17.0+-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-iOS-lightgrey.svg)
-![License](https://img.shields.io/badge/License-MIT-green.svg)
+![License](https://img.shields.io/badge/License-Proprietary-red.svg)
 
 ---
 
@@ -416,7 +416,9 @@ For questions, feedback, or collaboration:
 
 ## 📝 License
 
-MIT License - free for personal and commercial use.
+**Copyright © 2026 Raphael. All rights reserved.**
+
+This software is proprietary and confidential. No part of this project may be used, copied, modified, distributed, or reproduced without explicit written permission from the owner.
 
 ---
 
