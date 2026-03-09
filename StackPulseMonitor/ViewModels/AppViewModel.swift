@@ -27,22 +27,31 @@ class AppViewModel {
 
     var healthScore: Int {
         var score = 100
-        for item in stackItems {
-            switch item.status {
-            case .update: score -= 3
-            case .critical: score -= 15
-            case .eol: score -= 10
-            case .unknown: score -= 1
-            case .ok: break
+        // Use projects (new model) instead of stackItems (legacy)
+        for project in projects {
+            for dep in project.dependencies {
+                if dep.isOutdated {
+                    score -= 3
+                } else if dep.currentVersion.isEmpty && dep.latestVersion != nil {
+                    score -= 3
+                } else if dep.currentVersion.isEmpty {
+                    score -= 1
+                }
+                // .ok and up-to-date: no penalty
             }
-            if item.breaking { score -= 5 }
         }
         return max(0, min(100, score))
     }
 
-    var upToDateCount: Int { stackItems.filter { $0.status == .ok }.count }
-    var updateCount: Int { stackItems.filter { $0.status == .update }.count }
-    var criticalCount: Int { stackItems.filter { $0.status == .critical }.count }
+    var upToDateCount: Int { 
+        projects.flatMap { $0.dependencies }.filter { !$0.isOutdated && !$0.currentVersion.isEmpty }.count 
+    }
+    var updateCount: Int { 
+        projects.flatMap { $0.dependencies }.filter { $0.isOutdated }.count 
+    }
+    var criticalCount: Int { 
+        0 // Dependency doesn't track vulnerabilities, always 0
+    }
     var activeAlerts: [TechAlert] { alerts.filter { !$0.isDismissed && ($0.snoozedUntil == nil || $0.snoozedUntil! < Date()) } }
     
     /// Alerts that haven't been read yet (for badge)

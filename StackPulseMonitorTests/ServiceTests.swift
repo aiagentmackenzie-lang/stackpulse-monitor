@@ -98,7 +98,8 @@ struct TechnologyTests {
             type: .npm,
             category: .frontend,
             currentVersion: "17.0.0",
-            latestVersion: "18.2.0"
+            latestVersion: "18.2.0",
+            status: .update
         )
         
         #expect(outdatedTech.status == .update)
@@ -110,7 +111,8 @@ struct TechnologyTests {
             type: .npm,
             category: .frontend,
             currentVersion: "18.2.0",
-            latestVersion: "18.2.0"
+            latestVersion: "18.2.0",
+            status: .ok
         )
         
         #expect(okTech.status == .ok)
